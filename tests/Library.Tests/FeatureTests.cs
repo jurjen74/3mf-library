@@ -239,15 +239,33 @@ public sealed partial class FeatureTests : IDisposable
     }
 
     [Fact]
-    public async Task Previews_downloads_and_slicer_links_keep_a_bare_404()
+    public async Task Any_unknown_page_a_browser_opens_gets_the_not_found_page()
     {
-        var image = await Send(Client(), "/img/0123456789abcdef/plate_1.png", Lan);
-        var slicerLink = await Send(Client(), "/dl/not-a-token/x.3mf", Outside);
+        var request = new HttpRequestMessage(HttpMethod.Get, "/foo");
+        request.Headers.Add("X-Test-Peer", Lan);
+        request.Headers.Add("Accept", "text/html,application/xhtml+xml,*/*;q=0.8");
+        var response = await Client().SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.NotFound, image.StatusCode);
-        Assert.Empty(await image.Content.ReadAsStringAsync());
-        Assert.Equal(HttpStatusCode.NotFound, slicerLink.StatusCode);
-        Assert.Empty(await slicerLink.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var page = await response.Content.ReadAsStringAsync();
+        Assert.Contains("<h1>Not found</h1>", page);
+        Assert.Contains("This page doesn't exist.", page);
+    }
+
+    [Theory]
+    [InlineData("/img/0123456789abcdef/plate_1.png", Lan)]
+    [InlineData("/dl/not-a-token/x.3mf", Outside)]
+    [InlineData("/css/nope.css", Lan)]
+    public async Task Previews_downloads_and_slicer_links_keep_a_bare_404(string url, string peer)
+    {
+        // Even when the client claims to want HTML, as a browser tab opening the link would.
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("X-Test-Peer", peer);
+        request.Headers.Add("Accept", "text/html,*/*");
+        var response = await Client().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Empty(await response.Content.ReadAsStringAsync());
     }
 
     private static List<string> Cards(string html) => CardPattern().Matches(html).Select(m => m.Groups[1].Value).ToList();

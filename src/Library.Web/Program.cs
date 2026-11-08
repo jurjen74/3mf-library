@@ -107,11 +107,23 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 }
 
-// Missing folders and files get a proper page (nearest existing folder, search). Everything else — previews,
-// downloads, slicer links — keeps its bare 404, so a slicer or <img> never receives a login redirect or HTML.
+// Missing pages, folders and files get a proper page (nearest existing folder, search): /browse and /file always,
+// any other address when a browser asks for a page (Accept: text/html, e.g. /foo). Files — previews, meshes,
+// downloads, ZIPs, slicer links, static assets — keep their bare 404, so a slicer or <img> never gets HTML.
+string[] fileRoutes = ["/img", "/mesh", "/download", "/dl", "/zip", "/slicer-link", "/health", "/manifest.webmanifest",
+    "/css", "/js", "/lib", "/icons", "/fonts", "/backgrounds"];
 app.UseWhen(
-    context => HttpMethods.IsGet(context.Request.Method) &&
-               (context.Request.Path.StartsWithSegments("/browse") || context.Request.Path.StartsWithSegments("/file")),
+    context =>
+    {
+        var request = context.Request;
+        if (!HttpMethods.IsGet(request.Method) || fileRoutes.Any(route => request.Path.StartsWithSegments(route)))
+        {
+            return false;
+        }
+
+        return request.Path.StartsWithSegments("/browse") || request.Path.StartsWithSegments("/file") ||
+               request.Headers.Accept.Any(accept => accept?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true);
+    },
     branch => branch.UseStatusCodePagesWithReExecute("/not-found"));
 
 app.Use(async (context, next) =>
