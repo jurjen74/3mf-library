@@ -88,6 +88,14 @@ public sealed partial class UserStore
             );
             """,
             "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;",
+            """
+            CREATE TABLE favourites (
+                owner_id   INTEGER NOT NULL,  -- users.id, or 0 for the shared home-network list
+                path       TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (owner_id, path)
+            );
+            """,
         ];
 
         using var connection = Open();
@@ -208,6 +216,11 @@ public sealed partial class UserStore
     {
         using var connection = Open();
         var deleted = connection.Execute($"DELETE FROM users WHERE id = @id AND {NotLastAdmin}", new { id });
+        if (deleted == 1)
+        {
+            connection.Execute("DELETE FROM favourites WHERE owner_id = @id", new { id });
+        }
+
         return deleted == 1 ? UserChange.Done : Explain(connection, id);
     }
 

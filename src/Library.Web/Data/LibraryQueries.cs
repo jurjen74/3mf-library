@@ -34,6 +34,46 @@ public sealed class LibraryQueries(LibraryDb db)
         return connection.QuerySingleOrDefault<FileRow>($"SELECT {FileColumns} FROM files f WHERE f.path = @path", new { path });
     }
 
+    public bool FolderExists(string path)
+    {
+        using var connection = db.Open();
+        return path.Length == 0 || connection.ExecuteScalar<long>("SELECT EXISTS (SELECT 1 FROM folders WHERE path = @path)", new { path }) != 0;
+    }
+
+    /// <summary>Every indexed file in a folder and its sub-folders, for the folder ZIP.</summary>
+    public IReadOnlyList<FileRow> FilesUnder(string folder)
+    {
+        using var connection = db.Open();
+        return connection.Query<FileRow>($"""
+            SELECT {FileColumns} FROM files f
+            WHERE @folder = '' OR f.folder = @folder OR substr(f.folder, 1, length(@folder) + 1) = @folder || '/'
+            ORDER BY f.path
+            """, new { folder }).AsList();
+    }
+
+    /// <summary>Number of files and total size under a folder (recursive).</summary>
+    public (long Files, long Bytes) FolderTotals(string folder)
+    {
+        using var connection = db.Open();
+        var totals = connection.QuerySingle<(long, long)>("""
+            SELECT COUNT(*), COALESCE(SUM(size), 0) FROM files
+            WHERE @folder = '' OR folder = @folder OR substr(folder, 1, length(@folder) + 1) = @folder || '/'
+            """, new { folder });
+        return totals;
+    }
+
+    /// <summary>Files for a list of paths (favourites); paths no longer in the library are left out.</summary>
+    public IReadOnlyList<FileRow> FilesByPath(IReadOnlyCollection<string> paths)
+    {
+        if (paths.Count == 0)
+        {
+            return [];
+        }
+
+        using var connection = db.Open();
+        return connection.Query<FileRow>($"SELECT {FileColumns} FROM files f WHERE f.path IN @paths", new { paths }).AsList();
+    }
+
     public FileRow? FindByCacheKey(string cacheKey)
     {
         using var connection = db.Open();

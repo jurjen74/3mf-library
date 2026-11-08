@@ -12,7 +12,7 @@ public static class Session
     private const string UserKey = "library.user";
 
     // While a password change is required, only these paths are reachable (plus nothing else).
-    private static readonly string[] OpenWhileChangeRequired = ["/account", "/logout", "/health", "/css/", "/js/", "/lib/", "/favicon.svg"];
+    private static readonly string[] OpenWhileChangeRequired = ["/account", "/logout", "/health", "/css/", "/js/", "/lib/", "/icons/", "/favicon.svg", "/manifest.webmanifest"];
 
     public static Task SignInAsync(HttpContext context, AppUser user, bool persistent)
     {

@@ -30,6 +30,9 @@ public sealed class BrowseModel(LibraryQueries queries, IndexerService indexer) 
     public IReadOnlyList<FileRow> Models { get; private set; } = [];
     public IReadOnlyList<FileRow> OtherFiles { get; private set; } = [];
 
+    /// <summary>Files and bytes in this folder and below, for the ZIP button.</summary>
+    public (long Files, long Bytes) Totals { get; private set; }
+
     /// <summary>True while the very first scan hasn't produced anything to show yet.</summary>
     public bool StillIndexing { get; private set; }
 
@@ -64,6 +67,7 @@ public sealed class BrowseModel(LibraryQueries queries, IndexerService indexer) 
             .ToList();
 
         var files = queries.FilesIn(folder);
+        Totals = queries.FolderTotals(folder);
         Models = files.Where(f => FileKinds.IsModel(f.Kind))
             .OrderBy(f => f.Name, Display.NameOrder)
             .ToList();

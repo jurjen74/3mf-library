@@ -16,6 +16,10 @@ public static class Display
 
     public static string FileUrl(string path) => "/file/" + EscapePath(path);
 
+    public static string SlicerLinkUrl(string path) => "/slicer-link/" + EscapePath(path);
+
+    public static string ZipUrl(string folder) => folder.Length == 0 ? "/zip" : "/zip/" + EscapePath(folder);
+
     /// <summary>"35 min", "2 h 05 min".</summary>
     public static string Duration(long seconds)
     {

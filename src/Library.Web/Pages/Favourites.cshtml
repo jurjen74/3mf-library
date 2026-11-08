@@ -1,0 +1,47 @@
+@page "/favourites"
+@model FavouritesModel
+@using Library.Web.Pages.Shared
+
+<main class="content">
+    <h1>Favourites</h1>
+    <p class="muted lead">
+        @(Model.Shared
+            ? "Shared by everyone using the library on the home network without logging in."
+            : "Only you see these. Star a model on its card or its page to add it.")
+    </p>
+
+    @if (Model.Models.Count + Model.OtherFiles.Count == 0)
+    {
+        <p class="empty">Nothing here yet. Tap the ☆ on a model to keep it here.</p>
+    }
+
+    @if (Model.Models.Count > 0)
+    {
+        <section>
+            <h2 class="section-title">Models <span>@Model.Models.Count</span></h2>
+            <div class="card-grid">
+                @foreach (var file in Model.Models)
+                {
+                    <partial name="_ModelCard" model="new ModelCard(file, ShowFolder: true)" />
+                }
+            </div>
+        </section>
+    }
+
+    @if (Model.OtherFiles.Count > 0)
+    {
+        <section>
+            <h2 class="section-title">Other files <span>@Model.OtherFiles.Count</span></h2>
+            <ul class="file-list">
+                @foreach (var file in Model.OtherFiles)
+                {
+                    <li>
+                        <span class="file-icon kind--@file.Kind">@(System.IO.Path.GetExtension(file.Name).TrimStart('.').ToUpperInvariant())</span>
+                        <a class="file-list-name" href="@Display.FileUrl(file.Path)" title="@file.Path">@file.Path</a>
+                        <a class="download" href="@Display.DownloadUrl(file.Path)" download>@Display.Size(file.Size)</a>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</main>

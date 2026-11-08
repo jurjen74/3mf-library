@@ -24,6 +24,8 @@ builder.Services.AddSingleton<LibraryScanner>();
 builder.Services.AddSingleton<IndexerService>();
 builder.Services.AddSingleton<MeshService>();
 builder.Services.AddSingleton<UserStore>();
+builder.Services.AddSingleton<SlicerLinks>();
+builder.Services.AddSingleton<FavouriteStore>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexerService>());
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(options.DataPath, "keys")))
@@ -131,6 +133,25 @@ app.MapStaticAssets().AllowAnonymous();
 
 app.MapGet("/", () => Results.Redirect("/browse"));
 
+// Web app manifest: lets phones and desktops install the site as an app (home screen icon, own window).
+app.MapGet("/manifest.webmanifest", () => Results.Json(new
+{
+    name = options.SiteTitle,
+    short_name = options.SiteTitle.Length <= 12 ? options.SiteTitle : "3D Prints",
+    description = "Browse, preview and download the 3D print library.",
+    start_url = "/browse",
+    scope = "/",
+    display = "standalone",
+    background_color = "#131416",
+    theme_color = "#2f6fde",
+    icons = new object[]
+    {
+        new { src = "/icons/icon-192.png", sizes = "192x192", type = "image/png", purpose = "any" },
+        new { src = "/icons/icon-512.png", sizes = "512x512", type = "image/png", purpose = "any" },
+        new { src = "/icons/maskable-512.png", sizes = "512x512", type = "image/png", purpose = "maskable" },
+    },
+}, contentType: "application/manifest+json")).AllowAnonymous();
+
 app.MapGet("/health", (IndexerService indexer) => Results.Ok(new
 {
     status = "ok",
@@ -181,6 +202,63 @@ app.MapGet("/mesh/{key}/{name}.bin", async (string key, string name, MeshService
     context.Response.Headers.ContentEncoding = "gzip";
     context.Response.Headers.CacheControl = "private, max-age=31536000, immutable";
     return Results.File(result.Path, "application/octet-stream");
+});
+
+// "Open in Bambu Studio": a logged-in visitor gets a short-lived signed link for one model...
+app.MapGet("/slicer-link/{**path}", (string? path, HttpContext context, LibraryQueries queries, SlicerLinks links) =>
+{
+    if (!LibraryPaths.TryNormalize(path, out var relative) || queries.FindFile(relative) is not { } file || !FileKinds.IsModel(file.Kind))
+    {
+        return Results.NotFound();
+    }
+
+    context.Response.Headers.CacheControl = "no-store";
+    return Results.Ok(new { url = links.Create(context.Request, file.Path, file.Name) });
+});
+
+// ...which the slicer downloads without a cookie. Only a valid, unexpired token opens it, and only for that file.
+app.MapGet("/dl/{token}/{name}", (string token, string name, LibraryQueries queries, LibraryPaths paths, SlicerLinks links) =>
+{
+    if (links.Resolve(token) is not { } relative ||
+        queries.FindFile(relative) is not { } file ||
+        !paths.TryGetFullPath(relative, out var fullPath) ||
+        !File.Exists(fullPath))
+    {
+        return Results.NotFound();
+    }
+
+    return Results.File(fullPath, FileKinds.ContentType(file.Name), file.Name, enableRangeProcessing: true);
+}).AllowAnonymous();
+
+// A whole folder as one ZIP, streamed while it's built (no size known up front, so no Content-Length).
+app.MapGet("/zip/{**path}", async (string? path, HttpContext context, LibraryQueries queries, LibraryPaths paths, ILogger<Program> log) =>
+{
+    if (!LibraryPaths.TryNormalize(path, out var folder) || !queries.FolderExists(folder) ||
+        queries.FilesUnder(folder) is not { Count: > 0 } files)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    var name = FolderZip.ArchiveName(folder);
+    context.Response.ContentType = "application/zip";
+    context.Response.Headers.ContentDisposition = new Microsoft.Net.Http.Headers.ContentDispositionHeaderValue("attachment")
+    {
+        FileNameStar = name,
+        FileName = new string(name.Select(c => c < 128 && c != '"' ? c : '_').ToArray()),
+    }.ToString();
+    context.Response.Headers.CacheControl = "private, no-store";
+
+    // ZipArchive writes synchronously; allow it for this response only, on a worker thread.
+    context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>()!.AllowSynchronousIO = true;
+    try
+    {
+        await Task.Run(() => FolderZip.Write(context.Response.Body, folder, files, paths, context.RequestAborted), context.RequestAborted);
+    }
+    catch (Exception ex) when (ex is OperationCanceledException or IOException)
+    {
+        log.LogInformation("Folder download of '{Folder}' stopped: {Message}", folder, ex.Message);
+    }
 });
 
 // Only files the index knows about can be downloaded, so ignored files and anything outside the library stay out.

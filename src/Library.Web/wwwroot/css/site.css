@@ -837,3 +837,48 @@ details.reset > summary::-webkit-details-marker { display: none; }
 .reset-form .check { flex-basis: 100%; display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); }
 .forced-logout { margin-top: 0.75rem; text-align: center; }
 .login-page { flex-direction: column; align-items: center; }
+
+/* Folder header with ZIP download */
+.folder-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1.5rem; margin-bottom: 1.25rem; }
+.folder-head h1 { margin: 0.2rem 0 0; }
+.folder-head .button .muted { font-weight: 500; }
+
+/* Slicers only run on computers: no "Open in Bambu Studio" on touch-only devices. */
+@media (hover: none) and (pointer: coarse) {
+  .slicer-button { display: none; }
+}
+
+/* Favourites */
+.card-media { position: relative; }
+.fav-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+}
+.fav-toggle svg path { fill: none; }
+.fav-toggle[aria-pressed="true"] { color: #e8a317; }
+.fav-toggle[aria-pressed="true"] svg path { fill: currentColor; }
+.card-media > .fav-toggle {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.5);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.card:hover .card-media > .fav-toggle,
+.card-media > .fav-toggle:focus-visible,
+.card-media > .fav-toggle[aria-pressed="true"] { opacity: 1; }
+.card-media > .fav-toggle[aria-pressed="true"] { color: #ffc23d; }
+@media (hover: none) {
+  .card-media > .fav-toggle { opacity: 1; }
+}
+.fav-toggle--button[aria-pressed="true"] { border-color: #e8a317; }

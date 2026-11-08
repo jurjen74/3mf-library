@@ -2,7 +2,8 @@
 
 A self-hosted preview site for the 3D print folder. It shows the folders exactly as they are on disk, with a card per
 model using the plate previews Bambu Studio embeds in every 3MF (STLs and bare geometry get a rendered
-preview), a page per file with photos, description and a 3D viewer, search, and download links. It's a single ASP.NET Core
+preview), a page per file with photos, description and a 3D viewer, search, favourites, downloads (single files or a
+whole folder as ZIP) and an "Open in Bambu Studio" button. It can be installed as an app on a phone's home screen. It's a single ASP.NET Core
 (.NET 10) container that mounts the library **read-only**. See [PLAN.md](PLAN.md) for the design and milestones.
 
 ## Develop

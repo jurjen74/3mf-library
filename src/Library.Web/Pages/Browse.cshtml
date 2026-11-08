@@ -44,7 +44,18 @@
             }
         </nav>
 
-        <h1>@(isRoot ? "Library" : Model.FolderName)</h1>
+        <div class="folder-head">
+            <h1>@(isRoot ? "Library" : Model.FolderName)</h1>
+            @if (Model.Totals.Files > 0)
+            {
+                <a class="button" href="@Display.ZipUrl(Model.FolderPath)" download
+                   title="Everything in this folder and its sub-folders as one ZIP"
+                   data-confirm="@(Model.Totals.Bytes > 1024L * 1024 * 1024 ? $"This ZIP will be {Display.Size(Model.Totals.Bytes)}. Download it?" : null)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4.5-4.5M12 14l-4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Download folder <span class="muted">· @Display.Plural(Model.Totals.Files, "file", "files") · @Display.Size(Model.Totals.Bytes)</span>
+                </a>
+            }
+        </div>
 
         @if (Model.Subfolders.Count > 0)
         {

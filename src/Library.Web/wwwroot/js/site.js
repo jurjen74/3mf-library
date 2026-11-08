@@ -17,10 +17,14 @@
     setTimeout(() => window.location.reload(), seconds * 1000);
   }
 
-  // Forms that do something irreversible ask first.
+  // Forms and links that do something irreversible (or large) ask first.
   document.addEventListener("submit", (event) => {
     const message = event.target instanceof HTMLFormElement ? event.target.dataset.confirm : null;
     if (message && !window.confirm(message)) event.preventDefault();
+  });
+  document.addEventListener("click", (event) => {
+    const link = event.target instanceof Element ? event.target.closest("a[data-confirm]") : null;
+    if (link && !window.confirm(link.dataset.confirm)) event.preventDefault();
   });
 
   // "/" jumps to the search box.
@@ -173,6 +177,50 @@
       if (event.key === "ArrowRight") show(current + 1);
     });
   }
+
+  // Star buttons: toggle a favourite without leaving the page.
+  const token = () => document.querySelector('#request-token input[name="__RequestVerificationToken"]')?.value ?? "";
+  document.addEventListener("click", async (event) => {
+    const button = event.target instanceof Element ? event.target.closest("button[data-fav-path]") : null;
+    if (!button) return;
+    event.preventDefault();
+    const body = new URLSearchParams({ path: button.dataset.favPath, __RequestVerificationToken: token() });
+    try {
+      const response = await fetch("/favourites?handler=Toggle", { method: "POST", body, headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error(String(response.status));
+      const { favourite } = await response.json();
+      document.querySelectorAll("button[data-fav-path]").forEach((b) => {
+        if (b.dataset.favPath !== button.dataset.favPath) return;
+        b.setAttribute("aria-pressed", String(favourite));
+        b.title = favourite ? "Remove from favourites" : "Add to favourites";
+        const label = b.querySelector(".fav-label");
+        if (label) label.textContent = favourite ? "Favourite" : "Add to favourites";
+      });
+    } catch {
+      window.alert("Could not update your favourites. Reload the page and try again.");
+    }
+  });
+
+  // "Open in Bambu Studio": fetch a fresh short-lived link, then hand it to the slicer's URL scheme.
+  // macOS uses bambustudioopen://<url>; Windows and Linux use bambustudio://open?file=<url>.
+  document.querySelectorAll("[data-slicer-link]").forEach((button) =>
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch(button.dataset.slicerLink, { headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error(String(response.status));
+        const { url } = await response.json();
+        const mac = /Macintosh|Mac OS X/.test(navigator.userAgent);
+        window.location.href = mac
+          ? `bambustudioopen://${encodeURIComponent(url)}`
+          : `bambustudio://open?file=${encodeURIComponent(url)}`;
+      } catch {
+        window.alert("Could not prepare the file for Bambu Studio. Try downloading it instead.");
+      } finally {
+        setTimeout(() => (button.disabled = false), 1500);
+      }
+    }),
+  );
 
   // File page: ← / → go to the previous / next model in the folder.
   document.addEventListener("keydown", (event) => {

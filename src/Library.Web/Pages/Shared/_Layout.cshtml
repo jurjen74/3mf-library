@@ -21,6 +21,14 @@
     <meta name="color-scheme" content="light dark">
     <title>@ViewData["Title"] · @Options.SiteTitle</title>
     <link rel="icon" href="~/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="~/icons/apple-touch-icon.png">
+    <meta name="theme-color" content="#f5f4f1" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#131416" media="(prefers-color-scheme: dark)">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="@Options.SiteTitle">
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true">
     <script src="~/js/site.js" asp-append-version="true" defer></script>
 </head>
@@ -37,6 +45,7 @@
                 <input type="search" name="q" value="@(ViewData["Query"] as string)" placeholder="Search models" aria-label="Search the library" accesskey="k">
             </form>
             <nav class="topbar-nav">
+                <a href="/favourites">Favourites</a>
                 <a href="/recent">Recent</a>
                 <span class="topbar-stats">@Display.Plural(stats.ThreeMf, "3MF", "3MFs") · @Display.Plural(stats.Stl, "STL", "STLs")</span>
                 @if (homeNetwork)
@@ -64,6 +73,11 @@
         <div class="setup-banner">
             No account yet. <a href="/setup">Create one</a> to open the library away from home.
         </div>
+    }
+
+    @if (stats is not null)
+    {
+        <form id="request-token" hidden>@Html.AntiForgeryToken()</form>
     }
 
     <div class="shell @(ViewData["ShellClass"] as string)">
