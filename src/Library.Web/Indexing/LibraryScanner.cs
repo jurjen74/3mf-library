@@ -31,7 +31,7 @@ public sealed record ScanResult(
 public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, LibraryPaths paths, ILogger<LibraryScanner> log)
 {
     /// <summary>Bump when extraction changes, so every file is re-read once.</summary>
-    public const int IndexerVersion = 3;
+    public const int IndexerVersion = 4;
 
     private const long MaxImageBytes = 16L * 1024 * 1024;
     private const long MaxStlBytes = 1024L * 1024 * 1024;
@@ -39,8 +39,18 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
 
     private readonly IgnoreMatcher _ignore = new(options.Ignore);
     private readonly DescriptionSanitizer _sanitizer = new();
+    private readonly Lock _gate = new();
 
+    /// <summary>One scan at a time: two at once would replace each other's preview folders.</summary>
     public ScanResult Scan(CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            return ScanOnce(cancellationToken);
+        }
+    }
+
+    private ScanResult ScanOnce(CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
 

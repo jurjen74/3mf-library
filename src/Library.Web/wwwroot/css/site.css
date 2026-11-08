@@ -78,7 +78,6 @@ h1 { font-size: 1.6rem; margin: 0.2rem 0 1.25rem; letter-spacing: -0.01em; }
   display: grid;
   grid-template-columns: 270px minmax(0, 1fr);
   width: 100%;
-  max-width: 1600px;
   margin: 0 auto;
 }
 
@@ -176,7 +175,8 @@ section + section { margin-top: 2rem; }
 /* Folder tiles */
 .folder-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  /* Tiles grow a little on big screens instead of becoming many tiny columns. */
+  grid-template-columns: repeat(auto-fill, minmax(clamp(170px, 7vw, 240px), 1fr));
   gap: 0.9rem;
 }
 
@@ -213,7 +213,8 @@ section + section { margin-top: 2rem; }
 /* Model cards */
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  /* ~210 px on a laptop, up to 300 px on an ultra-wide: about 10 per row at 3440 px. */
+  grid-template-columns: repeat(auto-fill, minmax(clamp(210px, 9vw, 300px), 1fr));
   gap: 1rem;
 }
 
@@ -407,7 +408,9 @@ section + section { margin-top: 2rem; }
 .topbar-nav a { color: var(--text); font-weight: 550; font-size: 0.9rem; }
 
 /* Pages without the folder tree */
-.shell--wide { grid-template-columns: minmax(0, 1fr); max-width: 1400px; }
+/* Library pages without the folder tree use the full width; settings pages stay a readable column. */
+.shell--wide { grid-template-columns: minmax(0, 1fr); }
+.shell--narrow { grid-template-columns: minmax(0, 1fr); max-width: 1200px; }
 
 /* Cards are links now */
 a.card-thumb { display: block; }
@@ -467,12 +470,22 @@ a.card-thumb:hover img { transform: scale(1.03); }
 .pager { display: flex; align-items: center; gap: 0.4rem; }
 .pager-count { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; min-width: 3.5em; text-align: center; }
 
+/* One grid for the whole file page: preview, details, photos, description. */
 .file-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-areas:
+    "visual facts"
+    "photos photos"
+    "description description";
   gap: 1.5rem;
   align-items: start;
 }
+.file-visual { grid-area: visual; min-width: 0; }
+.file-layout > .facts { grid-area: facts; }
+.file-photos { grid-area: photos; }
+.file-description { grid-area: description; }
+.file-page .file-layout > section { margin-top: 0.5rem; }
 
 .stage {
   margin: 0;
@@ -744,7 +757,10 @@ a.card-thumb:hover img { transform: scale(1.03); }
 .login-card .notice { margin: 0; font-size: 0.85rem; }
 
 @media (max-width: 1000px) {
-  .file-layout { grid-template-columns: minmax(0, 1fr); }
+  .file-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "visual" "facts" "photos" "description";
+  }
 }
 
 /* Phones and narrow windows */
@@ -882,3 +898,43 @@ details.reset > summary::-webkit-details-marker { display: none; }
   .card-media > .fav-toggle { opacity: 1; }
 }
 .fav-toggle--button[aria-pressed="true"] { border-color: #e8a317; }
+.device-settings { margin-top: 1.5rem; }
+.device-settings[hidden] { display: none; }
+.device-settings code { font-size: 0.8em; }
+.muted.small { font-size: 0.82rem; margin: 0; }
+.device-settings select {
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--text);
+  padding: 0.45rem 0.6rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.device-settings .muted.small[hidden] { display: none; }
+.slicer-button[hidden] { display: none; }
+
+/* Wide screens: preview | details + description | photos, all visible at once; the preview stays in view
+   while a long description scrolls. Without photos the middle column takes the room. */
+@media (min-width: 1800px) {
+  .file-layout {
+    grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr) minmax(300px, 0.8fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "visual facts photos"
+      "visual description photos";
+  }
+  .file-layout:not(:has(.file-photos)) {
+    grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr);
+    grid-template-areas:
+      "visual facts"
+      "visual description";
+  }
+  .file-page .file-layout > section { margin-top: 0; }
+  .file-visual { position: sticky; top: 64px; }
+  .stage > img,
+  .stage > .placeholder,
+  .stage-3d { max-height: calc(100vh - 240px); }
+  .file-photos .photo-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .file-description .prose { max-width: none; }
+}

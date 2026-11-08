@@ -201,26 +201,118 @@
     }
   });
 
-  // "Open in Bambu Studio": fetch a fresh short-lived link, then hand it to the slicer's URL scheme.
-  // macOS uses bambustudioopen://<url>; Windows and Linux use bambustudio://open?file=<url>.
-  document.querySelectorAll("[data-slicer-link]").forEach((button) =>
+  // "Open in <slicer>". Two routes:
+  // - download link: fetch a fresh short-lived /dl link and hand it to the slicer's own URL scheme (formats checked
+  //   against each slicer's source, and Manyfold's). Bambu Studio only opens 3MF this way; PrusaSlicer only downloads
+  //   from Printables/Thingiverse, so it has no download route at all.
+  // - local copy (Account → This computer): threemflib://open?path=<library path>&slicer=<id>, handled by the helper
+  //   in tools/mac-opener or tools/windows-opener, which opens the synced file itself (slicers with helper: true).
+  // Both choices are per browser (localStorage), not per account.
+  const isComputer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const isMac = /Macintosh|Mac OS X/.test(navigator.userAgent);
+  const openFile = (scheme) => (url) => `${scheme}://open?file=${encodeURIComponent(url)}`;
+  const slicers = {
+    bambu: {
+      name: "Bambu Studio",
+      link: (url) => (isMac ? `bambustudioopen://${encodeURIComponent(url)}` : openFile("bambustudio")(url)),
+      linkKinds: ["3mf"],
+      helper: true,
+    },
+    orca: { name: "OrcaSlicer", link: openFile("orcaslicer"), helper: true },
+    prusa: { name: "PrusaSlicer", link: null, helper: true },
+    cura: { name: "UltiMaker Cura", link: openFile("cura"), helper: true },
+    creality: { name: "Creality Print", link: openFile("crealityprintlink"), helper: false },
+    elegoo: { name: "ElegooSlicer", link: openFile("elegooslicer"), helper: false },
+  };
+  const canLink = (slicer, kind) => Boolean(slicer.link) && (!slicer.linkKinds || slicer.linkKinds.includes(kind));
+  const localKey = "library.openLocalCopy";
+  const slicerKey = "library.slicer";
+  const stored = (key) => {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+  const store = (key, value) => {
+    try {
+      if (value === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, value);
+    } catch {
+      // Storage blocked (private mode): the defaults apply.
+    }
+  };
+  const openLocal = () => isComputer && stored(localKey) === "1";
+  const slicerId = () => (isComputer && slicers[stored(slicerKey)] ? stored(slicerKey) : "bambu");
+
+  const deviceSettings = document.getElementById("this-computer");
+  const localToggle = document.getElementById("open-local");
+  const slicerSelect = document.getElementById("slicer-choice");
+  if (deviceSettings && localToggle && slicerSelect && isComputer) {
+    deviceSettings.hidden = false;
+    localToggle.checked = openLocal();
+    slicerSelect.value = slicerId();
+    const explain = () => {
+      const note = document.getElementById("slicer-note");
+      if (!note) return;
+      const chosen = slicers[slicerSelect.value];
+      const text = !chosen.link && !localToggle.checked
+        ? `${chosen.name} can't download from this site (it only accepts Printables and Thingiverse), so the button only appears with the local-copy option below.`
+        : !chosen.helper && localToggle.checked
+          ? `The helper can't start ${chosen.name} yet, so the button downloads a copy into ${chosen.name} instead of opening your synced file.`
+          : chosen.linkKinds && !localToggle.checked
+            ? `${chosen.name} only opens 3MF files from a link; for STLs use Download, or the local-copy option below.`
+            : "";
+      note.textContent = text;
+      note.hidden = !text;
+    };
+    localToggle.addEventListener("change", () => {
+      store(localKey, localToggle.checked ? "1" : null);
+      explain();
+    });
+    slicerSelect.addEventListener("change", () => {
+      store(slicerKey, slicerSelect.value === "bambu" ? null : slicerSelect.value);
+      explain();
+    });
+    explain();
+  }
+
+  document.querySelectorAll("[data-slicer-link]").forEach((button) => {
+    const slicer = slicers[slicerId()];
+    const local = openLocal() && slicer.helper && Boolean(button.dataset.localPath);
+    const label = button.querySelector(".slicer-label");
+    if (!local && !canLink(slicer, button.dataset.kind)) {
+      // This slicer can't take this file by link, and the local copy isn't available: Download is the way.
+      button.hidden = true;
+      return;
+    }
+
+    if (label) label.textContent = local ? `Open local copy in ${slicer.name}` : `Open in ${slicer.name}`;
+    button.title = local
+      ? `Opens your synced copy of this file in ${slicer.name} (via the 3MF Library Opener helper).`
+      : slicerId() === "bambu"
+        ? "Opens the file in Bambu Studio. The first time it asks whether to trust this site: answer Yes."
+        : `Opens the file in ${slicer.name}, which downloads it first.`;
+
     button.addEventListener("click", async () => {
+      if (local) {
+        window.location.href = `threemflib://open?path=${encodeURIComponent(button.dataset.localPath)}&slicer=${slicerId()}`;
+        return;
+      }
+
       button.disabled = true;
       try {
         const response = await fetch(button.dataset.slicerLink, { headers: { Accept: "application/json" } });
         if (!response.ok) throw new Error(String(response.status));
         const { url } = await response.json();
-        const mac = /Macintosh|Mac OS X/.test(navigator.userAgent);
-        window.location.href = mac
-          ? `bambustudioopen://${encodeURIComponent(url)}`
-          : `bambustudio://open?file=${encodeURIComponent(url)}`;
+        window.location.href = slicer.link(url);
       } catch {
-        window.alert("Could not prepare the file for Bambu Studio. Try downloading it instead.");
+        window.alert(`Could not prepare the file for ${slicer.name}. Try downloading it instead.`);
       } finally {
         setTimeout(() => (button.disabled = false), 1500);
       }
-    }),
-  );
+    });
+  });
 
   // File page: ← / → go to the previous / next model in the folder.
   document.addEventListener("keydown", (event) => {

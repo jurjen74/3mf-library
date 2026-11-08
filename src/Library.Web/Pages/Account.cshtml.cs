@@ -67,7 +67,7 @@ public sealed class AccountModel(UserStore users, ILogger<AccountModel> log) : P
         Account = Session.UserId(User) is { } id ? users.FindById(id) : null;
         HasAccounts = Account is not null || users.HasUsers();
         ViewData["Title"] = Required ? "Choose your password" : "Account";
-        ViewData["ShellClass"] = "shell--wide";
+        ViewData["ShellClass"] = "shell--narrow";
 
         // Nothing else is reachable yet, so no search, menu or footer.
         ViewData["Anonymous"] = Required ? true : null;

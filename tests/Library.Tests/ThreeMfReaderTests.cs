@@ -30,6 +30,20 @@ public class ThreeMfReaderTests
         Assert.Contains("<img src=\"https://makerworld.example/a.jpg\">", info.Description);
     }
 
+    [Theory]
+    [InlineData("Count Dooku&amp;apos;s Lightsaber ", "Count Dooku's Lightsaber")]
+    [InlineData("Peter &amp;amp; Corien Lightbox", "Peter & Corien Lightbox")]
+    [InlineData("Salt &amp; Pepper", "Salt & Pepper")]
+    [InlineData("Plain title", "Plain title")]
+    public void Undoes_bambu_double_escaped_title(string escapedInXml, string expected)
+    {
+        using var zip = TestThreeMf.Open(TestThreeMf.Bambu(escapedInXml));
+
+        var info = ThreeMfReader.Read(zip);
+
+        Assert.Equal(expected, info.Title);
+    }
+
     [Fact]
     public void Reads_plates_with_names_previews_objects_and_estimates()
     {

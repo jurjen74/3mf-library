@@ -21,13 +21,16 @@ public sealed partial class FeatureTests : IDisposable
     private const string Password = "correct horse battery staple";
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "3mf-library-features", Guid.NewGuid().ToString("N"));
+
+    // Built once: a ZIP records entry times (2-second precision), so two builds can differ by a timestamp byte.
+    private readonly byte[] _torso = TestThreeMf.Bambu();
     private readonly WebApplicationFactory<Program> _factory;
 
     public FeatureTests()
     {
         var library = Path.Combine(_root, "library");
         Write(library, "Kits/Robot/arm.stl", TestMeshes.BinaryStl());
-        Write(library, "Kits/Robot/Body/torso.3mf", TestThreeMf.Bambu());
+        Write(library, "Kits/Robot/Body/torso.3mf", _torso);
         Write(library, "Kits/Robot/readme.txt", "Glue the arms last."u8.ToArray());
         Write(library, "Kits/Robot/datapackage.json", "{}"u8.ToArray());
         Write(library, "Kits/Robot Mini/arm.stl", TestMeshes.BinaryStl());
@@ -41,7 +44,15 @@ public sealed partial class FeatureTests : IDisposable
             host.UseSetting("SETTLE_DELAY", "00:00:00");
             host.ConfigureServices(services => services.AddSingleton<IStartupFilter, TestPeerFilter>());
         });
-        _factory.Services.GetRequiredService<LibraryScanner>().Scan(CancellationToken.None);
+        // Let the app's own startup scan finish (a second scan alongside it would only queue behind it).
+        var indexer = _factory.Services.GetRequiredService<IndexerService>();
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (indexer.Status.LastFinished is null && DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(20);
+        }
+
+        Assert.NotNull(indexer.Status.LastFinished);
     }
 
     public void Dispose()
@@ -62,7 +73,7 @@ public sealed partial class FeatureTests : IDisposable
         using var zip = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()));
         Assert.Equal(["Robot/arm.stl", "Robot/Body/torso.3mf", "Robot/readme.txt"], zip.Entries.Select(e => e.FullName).Order());
         Assert.Equal(TestMeshes.BinaryStl(), Read(zip.GetEntry("Robot/arm.stl")!));
-        Assert.Equal(TestThreeMf.Bambu(), Read(zip.GetEntry("Robot/Body/torso.3mf")!));
+        Assert.Equal(_torso, Read(zip.GetEntry("Robot/Body/torso.3mf")!));
     }
 
     [Theory]
@@ -91,7 +102,7 @@ public sealed partial class FeatureTests : IDisposable
         Assert.EndsWith("/torso.3mf", url.AbsolutePath);
         var download = await Send(slicer, url.PathAndQuery, Outside);
         Assert.Equal(HttpStatusCode.OK, download.StatusCode);
-        Assert.Equal(TestThreeMf.Bambu(), await download.Content.ReadAsByteArrayAsync());
+        Assert.Equal(_torso, await download.Content.ReadAsByteArrayAsync());
 
         var token = url.Segments[2].TrimEnd('/');
         Assert.Equal(HttpStatusCode.NotFound, (await Send(slicer, $"/dl/{token[..^4]}AAAA/torso.3mf", Outside)).StatusCode);

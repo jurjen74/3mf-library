@@ -242,13 +242,13 @@ public static partial class ThreeMfReader
         switch (key.ToLowerInvariant())
         {
             case "title":
-                info.Title ??= value;
+                info.Title ??= UnescapeText(value);
                 break;
             case "designer":
-                info.Designer ??= value;
+                info.Designer ??= UnescapeText(value);
                 break;
             case "license":
-                info.License ??= value;
+                info.License ??= UnescapeText(value);
                 break;
             case "description":
                 info.Description ??= UnescapeDescription(value);
@@ -261,6 +261,13 @@ public static partial class ThreeMfReader
                 break;
         }
     }
+
+    /// <summary>
+    /// Bambu Studio escapes plain-text fields twice as well (<c>Dooku&amp;amp;apos;s</c>, <c>Peter &amp;amp;amp; Corien</c>).
+    /// A lone "&amp;" ("Salt &amp; Pepper") isn't an entity and stays as it is.
+    /// </summary>
+    private static string UnescapeText(string value) =>
+        value.Contains('&', StringComparison.Ordinal) ? WebUtility.HtmlDecode(value).Trim() : value;
 
     /// <summary>
     /// Bambu Studio escapes the description HTML twice, and attribute quotes once more (<c>class=&amp;#34;x&amp;#34;</c>).

@@ -126,7 +126,7 @@ public sealed class UsersModel(UserStore users, ILogger<UsersModel> log) : PageM
     {
         Me = Session.UserId(User) is { } id ? users.FindById(id) : null;
         ViewData["Title"] = "Users";
-        ViewData["ShellClass"] = "shell--wide";
+        ViewData["ShellClass"] = "shell--narrow";
         if (Me is not { IsAdmin: true })
         {
             Me = null;

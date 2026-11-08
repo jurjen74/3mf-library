@@ -68,6 +68,43 @@ up again.
 with Force SSL, keep *Cache Assets* off, and set `KNOWN_PROXIES=<npm-ip>` in `/opt/3mf-library/.env` so the app sees
 the visitor's real address and that the connection is HTTPS (secure cookie, per-visitor rate limit on logins).
 
+## Slicers and the local copy (Mac, Windows)
+
+File pages have an **Open in …** button. Pick the slicer per computer under **Account → This computer** (stored in that
+browser; default Bambu Studio):
+
+| Slicer | Downloads from this site | Local copy (helper) |
+|---|---|---|
+| Bambu Studio | 3MF only (asks once whether to trust the site) | yes |
+| OrcaSlicer | yes (needs a download folder set in OrcaSlicer) | yes |
+| PrusaSlicer | no — it only downloads from Printables/Thingiverse | yes |
+| UltiMaker Cura | yes | yes |
+| Creality Print | yes | no (downloads instead) |
+| ElegooSlicer | yes | no (downloads instead) |
+
+Link formats follow each slicer's source code and [Manyfold](https://github.com/manyfold3d/manyfold)'s handlers; only
+Bambu Studio has been tried with the real app.
+
+If a computer also has the library synced (OneDrive's `3D Print` folder), the slicer can open the **actual file**
+instead of a downloaded copy, so saving updates the original. Install the small helper once, then tick **Open models
+from my local copy** on that computer.
+
+**Mac:** puts `3MF Library Opener.app` in `~/Applications` and registers `threemflib://` links (pass another folder as
+the first argument if the library lives elsewhere). Uninstall by deleting the app.
+
+```bash
+tools/mac-opener/build.sh
+```
+
+**Windows:** copies the helper to `%LOCALAPPDATA%\3MF Library Opener` and registers `threemflib://` for your user (no
+admin rights). It finds OneDrive's `3D Print` and the installed slicers itself; otherwise pass `-LibraryFolder`,
+`-BambuStudio`, `-OrcaSlicer`, `-PrusaSlicer` or `-Cura`. Run it again after installing another slicer. Uninstall with
+`uninstall.ps1`. On a Mac the helper opens whichever of the four slicers is installed (by app name).
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\windows-opener\install.ps1
+```
+
 ## Configuration
 
 | Variable | Default | |

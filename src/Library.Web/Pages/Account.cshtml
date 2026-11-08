@@ -53,4 +53,34 @@
             <button type="submit" class="button primary">Change password</button>
         </form>
     }
+
+    @if (!Model.Required)
+    {
+        @* Shown by site.js on computers (mouse or trackpad) only; the choice is stored in this browser, not the account. *@
+        <section class="login-card account-card device-settings" id="this-computer" hidden>
+            <h2>This computer</h2>
+            <label>
+                <span>Slicer for the "Open in…" button</span>
+                <select id="slicer-choice">
+                    <option value="bambu">Bambu Studio</option>
+                    <option value="orca">OrcaSlicer</option>
+                    <option value="prusa">PrusaSlicer (local copy only)</option>
+                    <option value="cura">UltiMaker Cura</option>
+                    <option value="creality">Creality Print</option>
+                    <option value="elegoo">ElegooSlicer</option>
+                </select>
+            </label>
+            <p class="muted small" id="slicer-note" hidden></p>
+            <label class="remember">
+                <input type="checkbox" id="open-local">
+                <span>Open models from my local copy of the library</span>
+            </label>
+            <p class="muted small">
+                For a computer that has the 3D print folder synced too. The slicer then opens and saves your actual file
+                instead of a downloaded copy. Needs the small helper from the repository, installed once:
+                <code>tools/mac-opener/build.sh</code> on a Mac, <code>tools\windows-opener\install.ps1</code> on Windows.
+                These settings only affect this browser on this computer.
+            </p>
+        </section>
+    }
 </main>

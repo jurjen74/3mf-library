@@ -26,7 +26,28 @@ library is mounted **read-only** and never written to.
   (from Bambu Studio's `GUI_App.cpp`). Bambu only trusts MakerWorld and asks once ("not from a trusted site") — answer
   Yes. The slicer downloads without cookies, so the button fetches a 15-minute signed link (`/dl/{token}/{name}`) for
   that one file. Hidden on touch devices: no slicer on phones (Bambu Handy can't open 3MFs either). Tested and working.
-  OrcaSlicer not supported (undocumented macOS scheme).
+- **Other slicers** (owner only has Bambu Studio; the others are untested): per-browser choice under Account → This
+  computer (`localStorage` `library.slicer`: bambu | orca | prusa | cura | creality | elegoo). Download-link formats,
+  checked against the slicers' sources and Manyfold's `app/lib/file_handlers`: `orcaslicer://open?file=`,
+  `cura://open?file=` (no domain filter; filename from Content-Disposition), `crealityprintlink://open?file=`,
+  `elegooslicer://open?file=` (these two from Manyfold only). Bambu Studio only opens 3MF by link (Manyfold's finding),
+  so STLs need the local copy. PrusaSlicer's downloader only accepts printables.com/thingiverse.com, so it's
+  local-copy only. Helpers support bambu/orca/prusa/cura (`&slicer=<id>`; Mac by bundle id or app name, Windows by the
+  exe paths `install.ps1` found, `config.json` → `slicers`); Creality Print and ElegooSlicer fall back to the download
+  link. The button is hidden when neither route works.
+- **Local copy on a computer with the library synced** (opt-in per browser: Account → This computer, shown on
+  mouse/trackpad devices; `localStorage` `library.openLocalCopy`): the button then fires
+  `threemflib://open?path=<library path>`, handled by a per-OS helper that opens the synced file with Bambu Studio, so
+  saves go back via OneDrive. Library paths on the site equal the paths in the OneDrive folder. Any page can fire that
+  scheme, so the helpers only open model files inside the configured folder (no `..`, `.`, empty segments, absolute or
+  drive paths).
+  - macOS `tools/mac-opener`: built and registered on the owner's Mac (`~/Applications/3MF Library Opener.app`, folder
+    `~/Library/CloudStorage/OneDrive-Personal/3D Print` baked in at build time). Tested end to end, works.
+  - Windows `tools/windows-opener`: `install.ps1` → `%LOCALAPPDATA%\3MF Library Opener` (`open-model.ps1`,
+    `launch.vbs`, `config.json`) + `HKCU\Software\Classes\threemflib`. `launch.vbs` hides the console and passes the
+    link via the `THREEMFLIB_URL` env var (WshShell.Run expands `%NAME%`). Script logic tested in the
+    `mcr.microsoft.com/powershell` container (`-DryRun -ConfigPath`); registry/launcher **not yet tested on Windows**.
+    Written for Windows PowerShell 5.1 (no PS7-only syntax; pass `[string[]]` to `Path.Combine`).
 - No offline mode / service worker; the "app" is manifest + icons only.
 
 ## Code layout
@@ -44,6 +65,9 @@ src/Library.Web/
   Pages/                Browse, File, Search, Recent, Favourites, Login, Setup, Account, Users, Logout, Error
   wwwroot/              css/site.css, js/site.js (classic), js/viewer.js (ES module), lib/three (three.js 0.186.1, vendored), icons/
 tests/Library.Tests/    xUnit v3 (Microsoft Testing Platform); synthetic fixtures only (TestThreeMf, TestMeshes)
+tools/mac-opener/       macOS helper for threemflib:// links: build.sh (osacompile + URL scheme + ad-hoc sign),
+                        opener.applescript, open-model.sh (decoding, checks; DRY_RUN=1 / LIBRARY_ROOT for testing)
+tools/windows-opener/   Windows helper: install.ps1 / uninstall.ps1, launch.vbs, open-model.ps1 (-DryRun -ConfigPath)
 ```
 
 Conventions: .NET 10, `TreatWarningsAsErrors`, central package versions (`Directory.Packages.props`), nullable on.
@@ -77,7 +101,7 @@ in the repo — tests build synthetic 3MF/STL in code.
 
 | What | Where |
 |---|---|
-| Library source | OneDrive `3D Print` → Synology Cloud Sync → `192.168.2.13:/volume1/3dprinting` (NFS v4.1, read-only export to the VM) |
+| Library source | OneDrive `3D Print` → Synology Cloud Sync (polls every 600 s; additions, changes and deletions, verified 2026-11-08) → `192.168.2.13:/volume1/3dprinting` (NFS v4.1, read-only export to the VM). A change in OneDrive reaches the site within ~10–14 min (sync interval + settle + 3-min scan) |
 | Docker host | Proxmox VM 130, Debian 13.7, `192.168.2.213` (DHCP reservation `BC:24:11:0E:B7:1D`), user `jurjenladenius`, SSH key-only |
 | App on the VM | `/opt/3mf-library/` → `docker-compose.yml` (copied from the repo), `.env` (`KNOWN_PROXIES=192.168.2.233`, not in git), `data/` |
 | Reverse proxy | Nginx Proxy Manager LXC `192.168.2.233` (reservation `BC:24:11:97:4F:C1`) → `http://192.168.2.213:8085`; Force SSL, HTTP/2, HSTS, Cache Assets off |
@@ -118,7 +142,7 @@ Razor views are compiled at build time: restart `dotnet run` after editing `.csh
 - `PageModel` already has `File(...)` methods — don't name a page property `File`.
 - CSS `display: block` on an element overrides its `hidden` attribute; add `[hidden] { display: none }` rules.
 - Bambu 3MFs: model metadata stops at `<resources>`; description HTML is escaped twice plus `&#34;` for attribute
-  quotes; painted colours are per-triangle hex trees read from the last character (`DominantPaintState`).
+  quotes, and title/designer/license are escaped twice too (`Dooku&amp;apos;s`); painted colours are per-triangle hex trees read from the last character (`DominantPaintState`).
 - Bambu Studio strips `../`-like sequences from slicer URLs; keep the last URL segment plain (`SlicerLinks.SafeName`).
 
 ## Working with the owner
@@ -131,7 +155,7 @@ Razor views are compiled at build time: restart `dotnet run` after editing `.csh
 ## Open items
 
 - Automated builds: GitHub Actions → GHCR, then `docker compose pull` on the VM.
-- Owner to check: Cloud Sync passes OneDrive deletions on to the NAS (it didn't); VM 130 in the Proxmox backup job;
-  Proxmox firewall rules for VM 130 (8085 from LAN/NPM only, 22 from LAN).
+- Owner to check: VM 130 in the Proxmox backup job; Proxmox firewall rules for VM 130 (8085 from LAN/NPM only,
+  22 from LAN).
 - Optional: share links (signed, expiring, scoped), OIDC login.
 - On the VM, `data/users.db.before-v2` / `before-v3` are pre-migration backups that can be deleted.
