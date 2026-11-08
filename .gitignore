@@ -15,3 +15,6 @@ TestResults/
 .env.*
 appsettings.Local.json
 /data-container/
+
+# Original design notes, kept locally only (decisions now live in CLAUDE.md)
+/PLAN.md
