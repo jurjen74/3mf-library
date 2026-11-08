@@ -36,9 +36,9 @@
     <div class="card-body">
         <h3 title="@title"><a href="@url">@title</a></h3>
         <p class="file-name" title="@file.Name">@file.Name</p>
-        @if (Model.ShowFolder)
+        @if (Model.FolderLabel is { } folderLabel)
         {
-            <p class="card-folder"><a href="@Display.BrowseUrl(file.Folder)" title="@(file.Folder.Length == 0 ? "Library" : file.Folder)">@(file.Folder.Length == 0 ? "Library" : file.Folder)</a></p>
+            <p class="card-folder"><a href="@Display.BrowseUrl(file.Folder)" title="@folderLabel">@Model.FolderShort</a></p>
         }
         @if (file.Designer is not null)
         {

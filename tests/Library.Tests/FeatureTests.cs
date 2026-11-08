@@ -186,6 +186,48 @@ public sealed partial class FeatureTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, (await Send(Client(), "/icons/maskable-512.png", Outside)).StatusCode);
     }
 
+    [Fact]
+    public async Task Include_subfolders_shows_every_model_below_a_folder_with_its_subfolder()
+    {
+        var client = Client();
+
+        Assert.Empty(Cards(await Page(client, "/browse/Kits", Lan)));
+        var page = await Page(client, "/browse/Kits?all=1", Lan);
+
+        // Default order in this view: by folder, then name.
+        Assert.Equal(["/file/Kits/Robot/arm.stl", "/file/Kits/Robot/Body/torso.3mf", "/file/Kits/Robot%20Mini/arm.stl"], Cards(page));
+        Assert.Contains(">Robot/Body</a>", page);
+        Assert.Contains("aria-checked=\"true\"", page);
+        Assert.DoesNotContain("class=\"folder-tile\"", page);
+    }
+
+    [Fact]
+    public async Task Model_lists_sort_and_filter_by_type()
+    {
+        var client = Client();
+        var library = Path.Combine(_root, "library");
+        long Size(string path) => new FileInfo(Path.Combine(library, path)).Length;
+        var bySize = new[] { "Kits/Robot/arm.stl", "Kits/Robot/Body/torso.3mf", "Kits/Robot Mini/arm.stl" }
+            .OrderByDescending(Size).ThenBy(p => Path.GetFileName(p), Display.NameOrder).ThenBy(p => Path.GetDirectoryName(p), Display.NameOrder)
+            .Select(p => Display.FileUrl(p));
+
+        Assert.Equal(bySize, Cards(await Page(client, "/browse/Kits?all=1&sort=size", Lan)));
+        Assert.Equal(["/file/Kits/Robot/arm.stl", "/file/Kits/Robot%20Mini/arm.stl"], Cards(await Page(client, "/browse/Kits?all=1&type=stl", Lan)));
+        Assert.Equal(["/file/Kits/Robot/Body/torso.3mf"], Cards(await Page(client, "/browse/Kits?all=1&type=3mf", Lan)));
+        Assert.Empty(Cards(await Page(client, "/search?q=arm&type=3mf", Lan)));
+        Assert.Equal(2, Cards(await Page(client, "/search?q=arm&type=stl", Lan)).Count);
+
+        // Sort and filter links keep the other choices; unknown values fall back to the defaults.
+        var filtered = await Page(client, "/browse/Kits?all=1&type=stl", Lan);
+        Assert.Contains("href=\"/browse/Kits?all=1&amp;type=stl&amp;sort=recent\"", filtered);
+        Assert.Equal(3, Cards(await Page(client, "/browse/Kits?all=1&type=nope&sort=nope", Lan)).Count);
+    }
+
+    private static List<string> Cards(string html) => CardPattern().Matches(html).Select(m => m.Groups[1].Value).ToList();
+
+    [GeneratedRegex("class=\"card-thumb\" href=\"([^\"]+)\"")]
+    private static partial Regex CardPattern();
+
     private HttpClient Client() =>
         _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
 

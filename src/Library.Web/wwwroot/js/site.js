@@ -37,6 +37,30 @@
     }
   });
 
+  // Phones: the header links fold into a menu (site.css only folds them when this script runs).
+  const topbar = document.querySelector(".topbar");
+  const menuToggle = document.querySelector(".menu-toggle");
+  if (topbar && menuToggle) {
+    const setMenu = (open) => {
+      topbar.classList.toggle("menu-open", open);
+      menuToggle.setAttribute("aria-expanded", String(open));
+    };
+    topbar.classList.add("has-menu");
+    menuToggle.hidden = false;
+    menuToggle.addEventListener("click", () => setMenu(!topbar.classList.contains("menu-open")));
+    document.addEventListener("click", (event) => {
+      if (event.target instanceof Node && !topbar.contains(event.target)) setMenu(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") setMenu(false);
+    });
+  }
+
+  // Phones: a long breadcrumb shows "Library / … / parent / here"; the "…" unfolds the whole path.
+  document.querySelector(".crumb-more button")?.addEventListener("click", (event) => {
+    event.currentTarget.closest(".crumbs")?.classList.add("crumbs--full");
+  });
+
   // File page: the 3D viewer, loaded only when asked for.
   const figure = document.querySelector(".stage[data-mesh]");
   const stage = document.getElementById("stage-image");

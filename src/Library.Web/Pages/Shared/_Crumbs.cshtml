@@ -1,0 +1,24 @@
+@using Library.Web.Pages.Shared
+@model CrumbTrail
+@{
+    // On phones the middle of a long path folds into "…" (site.css); tapping it shows the whole path (site.js).
+    var links = Model.Links;
+    var fold = links.Count >= 3;
+}
+<nav class="crumbs" aria-label="Breadcrumb">
+    @for (var i = 0; i < links.Count; i++)
+    {
+        <span class="crumb@(fold && i > 0 && i < links.Count - 1 ? " crumb--middle" : null)">
+            <a href="@Display.BrowseUrl(links[i].Path)">@links[i].Name</a>
+            <span class="sep" aria-hidden="true">/</span>
+        </span>
+        @if (fold && i == 0)
+        {
+            <span class="crumb crumb-more">
+                <button type="button" class="link-button" aria-label="Show the whole path" title="Show the whole path">…</button>
+                <span class="sep" aria-hidden="true">/</span>
+            </span>
+        }
+    }
+    <span class="crumb" aria-current="page">@Model.Current</span>
+</nav>

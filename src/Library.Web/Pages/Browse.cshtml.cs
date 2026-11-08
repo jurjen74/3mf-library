@@ -1,5 +1,6 @@
 using Library.Web.Data;
 using Library.Web.Indexing;
+using Library.Web.Pages.Shared;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -27,8 +28,13 @@ public sealed class BrowseModel(LibraryQueries queries, IndexerService indexer) 
     public FolderNode Tree { get; private set; } = new("", "");
     public IReadOnlyList<Crumb> Crumbs { get; private set; } = [];
     public IReadOnlyList<FolderTile> Subfolders { get; private set; } = [];
-    public IReadOnlyList<FileRow> Models { get; private set; } = [];
+    public ModelListView? List { get; private set; }
     public IReadOnlyList<FileRow> OtherFiles { get; private set; } = [];
+
+    /// <summary><c>?all=1</c>: the models of every folder below this one in one grid, instead of folder tiles.</summary>
+    public bool IncludeSubfolders { get; private set; }
+
+    public bool HasSubfolders => Subfolders.Count > 0;
 
     /// <summary>Files and bytes in this folder and below, for the ZIP button.</summary>
     public (long Files, long Bytes) Totals { get; private set; }
@@ -66,14 +72,18 @@ public sealed class BrowseModel(LibraryQueries queries, IndexerService indexer) 
             .Select(child => new FolderTile(child, queries.CoversUnder(child.Path, 4)))
             .ToList();
 
-        var files = queries.FilesIn(folder);
+        IncludeSubfolders = HasSubfolders && Request.Query["all"] == "1";
+        var files = IncludeSubfolders ? queries.FilesUnder(folder) : queries.FilesIn(folder);
         Totals = queries.FolderTotals(folder);
-        Models = files.Where(f => FileKinds.IsModel(f.Kind))
-            .OrderBy(f => f.Name, Display.NameOrder)
-            .ToList();
-        OtherFiles = files.Where(f => !FileKinds.IsModel(f.Kind))
-            .OrderBy(f => f.Name, Display.NameOrder)
-            .ToList();
+        List = ModelListView.Create(Request, files.Where(f => FileKinds.IsModel(f.Kind)),
+            IncludeSubfolders ? [ModelListView.Folder, ModelListView.Name, ModelListView.Recent, ModelListView.Size]
+                              : [ModelListView.Name, ModelListView.Recent, ModelListView.Size]);
+        OtherFiles = List.Filtered
+            ? []
+            : files.Where(f => !FileKinds.IsModel(f.Kind))
+                .OrderBy(f => f.Folder, Display.NameOrder)
+                .ThenBy(f => f.Name, Display.NameOrder)
+                .ToList();
 
         ViewData["Title"] = folder.Length == 0 ? "Library" : current.Name;
         ViewData["FolderPath"] = folder;

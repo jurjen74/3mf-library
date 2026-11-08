@@ -1,0 +1,22 @@
+@using Library.Web.Pages.Shared
+@model ModelListView
+@if (Model.SortOptions.Count > 0)
+{
+    <div class="segmented" role="group" aria-label="Sort models">
+        <span class="segmented-label">Sort</span>
+        @foreach (var option in Model.SortOptions)
+        {
+            <a href="@option.Url" aria-current="@(option.Selected ? "true" : null)" rel="nofollow">@option.Label</a>
+        }
+    </div>
+}
+@if (Model.TypeOptions.Count > 0)
+{
+    <div class="segmented" role="group" aria-label="Show file types">
+        <span class="segmented-label">Show</span>
+        @foreach (var option in Model.TypeOptions)
+        {
+            <a href="@option.Url" aria-current="@(option.Selected ? "true" : null)" rel="nofollow">@option.Label <span class="segmented-count">@option.Count</span></a>
+        }
+    </div>
+}

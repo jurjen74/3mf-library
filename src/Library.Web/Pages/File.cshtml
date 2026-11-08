@@ -20,14 +20,7 @@
 }
 
 <main class="content file-page">
-    <nav class="crumbs" aria-label="Breadcrumb">
-        @foreach (var crumb in Model.Crumbs)
-        {
-            <a href="@Display.BrowseUrl(crumb.Path)">@crumb.Name</a>
-            <span class="sep" aria-hidden="true">/</span>
-        }
-        <span aria-current="page">@file.Name</span>
-    </nav>
+    <partial name="_Crumbs" model="new Library.Web.Pages.Shared.CrumbTrail(Model.Crumbs, file.Name)" />
 
     <header class="file-head">
         <div class="file-title">

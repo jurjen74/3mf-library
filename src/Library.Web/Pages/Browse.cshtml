@@ -1,8 +1,10 @@
 @page "/browse/{**path}"
 @model BrowseModel
+@using Library.Web.Pages.Shared
 @{
     var isRoot = Model.FolderPath.Length == 0;
-    var isEmpty = Model.Subfolders.Count + Model.Models.Count + Model.OtherFiles.Count == 0;
+    var list = Model.List ?? ModelListView.Create(ViewContext.HttpContext.Request, [], ModelListView.Name);
+    var isEmpty = Model.Subfolders.Count + list.Models.Count + Model.OtherFiles.Count == 0 && !list.Filtered;
 }
 
 <aside class="sidebar">
@@ -28,21 +30,10 @@
     }
     else
     {
-        <nav class="crumbs" aria-label="Breadcrumb">
-            @for (var i = 0; i < Model.Crumbs.Count; i++)
-            {
-                var crumb = Model.Crumbs[i];
-                if (i == Model.Crumbs.Count - 1)
-                {
-                    <span aria-current="page">@crumb.Name</span>
-                }
-                else
-                {
-                    <a href="@Display.BrowseUrl(crumb.Path)">@crumb.Name</a>
-                    <span class="sep" aria-hidden="true">/</span>
-                }
-            }
-        </nav>
+        @if (Model.Crumbs.Count > 0)
+        {
+            <partial name="_Crumbs" model="new CrumbTrail(Model.Crumbs.Take(Model.Crumbs.Count - 1).ToList(), Model.Crumbs[^1].Name)" />
+        }
 
         <div class="folder-head">
             <h1>@(isRoot ? "Library" : Model.FolderName)</h1>
@@ -57,7 +48,23 @@
             }
         </div>
 
-        @if (Model.Subfolders.Count > 0)
+        @if (Model.HasSubfolders || list.SortOptions.Count + list.TypeOptions.Count > 0)
+        {
+            <div class="list-toolbar">
+                @if (Model.HasSubfolders)
+                {
+                    <a class="switch" role="switch" aria-checked="@(Model.IncludeSubfolders ? "true" : "false")" rel="nofollow"
+                       href="@ModelListView.With(Request, "all", Model.IncludeSubfolders ? null : "1")"
+                       title="Show the models of all folders below this one together">
+                        <span class="switch-track" aria-hidden="true"></span>
+                        Include subfolders
+                    </a>
+                }
+                <partial name="_ListControls" model="list" />
+            </div>
+        }
+
+        @if (Model.HasSubfolders && !Model.IncludeSubfolders)
         {
             <section>
                 <h2 class="section-title">Folders <span>@Model.Subfolders.Count</span></h2>
@@ -85,17 +92,27 @@
             </section>
         }
 
-        @if (Model.Models.Count > 0)
+        @if (list.Models.Count > 0)
         {
             <section>
-                <h2 class="section-title">Models <span>@Model.Models.Count</span></h2>
-                <div class="card-grid">
-                    @foreach (var file in Model.Models)
+                <h2 class="section-title">
+                    Models <span>@list.Models.Count</span>
+                    @if (Model.IncludeSubfolders)
                     {
-                        <partial name="_ModelCard" model="new Library.Web.Pages.Shared.ModelCard(file)" />
+                        <span class="section-note">in this folder and all folders below</span>
+                    }
+                </h2>
+                <div class="card-grid">
+                    @foreach (var file in list.Models)
+                    {
+                        <partial name="_ModelCard" model="new ModelCard(file, Model.IncludeSubfolders, Model.FolderPath)" />
                     }
                 </div>
             </section>
+        }
+        else if (list.Filtered)
+        {
+            <p class="empty">No models of this type here.</p>
         }
 
         @if (Model.OtherFiles.Count > 0)
@@ -114,7 +131,8 @@
                             {
                                 <span class="file-icon kind--@file.Kind">@(System.IO.Path.GetExtension(file.Name).TrimStart('.').ToUpperInvariant())</span>
                             }
-                            <a class="file-list-name" href="@Display.FileUrl(file.Path)" title="@file.Name">@file.Name</a>
+                            @{ var shownName = Model.IncludeSubfolders && Model.FolderPath.Length > 0 ? file.Path[(Model.FolderPath.Length + 1)..] : Model.IncludeSubfolders ? file.Path : file.Name; }
+                            <a class="file-list-name" href="@Display.FileUrl(file.Path)" title="@shownName">@shownName</a>
                             <a class="download" href="@Display.DownloadUrl(file.Path)" download title="Download @file.Name">@Display.Size(file.Size)</a>
                         </li>
                     }

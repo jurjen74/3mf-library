@@ -12,7 +12,7 @@
 
     @if (Model.Query.Length > 0)
     {
-        @if (Model.Folders.Count + Model.Models.Count + Model.OtherFiles.Count == 0)
+        @if (Model.Folders.Count + Model.List.Models.Count + Model.OtherFiles.Count == 0 && !Model.List.Filtered)
         {
             <p class="empty">Nothing matches “@Model.Query”. Words match the start of names, so “lamp” finds “Lampshade” but “shade” does not.</p>
         }
@@ -36,12 +36,19 @@
             </section>
         }
 
-        @if (Model.Models.Count > 0)
+        @if (Model.List.SortOptions.Count + Model.List.TypeOptions.Count > 0)
+        {
+            <div class="list-toolbar">
+                <partial name="_ListControls" model="Model.List" />
+            </div>
+        }
+
+        @if (Model.List.Models.Count > 0)
         {
             <section>
-                <h2 class="section-title">Models <span>@Model.Models.Count@(Model.Truncated ? "+" : "")</span></h2>
+                <h2 class="section-title">Models <span>@Model.List.Models.Count@(Model.Truncated ? "+" : "")</span></h2>
                 <div class="card-grid">
-                    @foreach (var file in Model.Models)
+                    @foreach (var file in Model.List.Models)
                     {
                         <partial name="_ModelCard" model="new ModelCard(file, ShowFolder: true)" />
                     }

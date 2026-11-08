@@ -938,3 +938,116 @@ details.reset > summary::-webkit-details-marker { display: none; }
   .file-photos .photo-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
   .file-description .prose { max-width: none; }
 }
+
+/* Toolbar above a list of models: "Include subfolders", sort order, 3MF/STL filter (all plain links). */
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.25rem;
+  margin: -0.5rem 0 1.5rem;
+  font-size: 0.85rem;
+}
+.segmented { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+.segmented-label { color: var(--muted); margin-right: 0.25rem; }
+.segmented a {
+  color: var(--text);
+  padding: 0.28rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+.segmented a:hover { text-decoration: none; border-color: var(--muted); }
+.segmented a[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.segmented-count { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 0.15rem; }
+.segmented a[aria-current="true"] .segmented-count { color: inherit; }
+
+.switch { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text); font-weight: 550; }
+.switch:hover { text-decoration: none; }
+.switch-track {
+  position: relative;
+  width: 2.1rem;
+  height: 1.2rem;
+  flex: none;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 0.12rem;
+  left: 0.12rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s;
+}
+.switch[aria-checked="true"] .switch-track { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked="true"] .switch-track::after { transform: translateX(0.9rem); background: #fff; }
+
+.section-title .section-note { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 0.5rem; }
+
+/* Breadcrumb: each folder with its separator, so the middle can fold away on phones. */
+.crumb { display: inline-flex; align-items: center; gap: 0.35rem; min-width: 0; }
+.crumb-more { display: none; }
+.crumb-more .link-button { color: var(--muted); padding: 0 0.15rem; font: inherit; }
+
+/* Header menu button: phones only, and only when site.js runs. */
+.menu-toggle { display: none; }
+
+@media (max-width: 800px) {
+  .crumbs:not(.crumbs--full) .crumb--middle { display: none; }
+  .crumbs:not(.crumbs--full) .crumb-more { display: inline-flex; }
+  .crumbs [aria-current] { overflow-wrap: anywhere; }
+
+  /* One row: logo, search, menu. The links drop down from the menu button. */
+  .topbar.has-menu { flex-wrap: nowrap; gap: 0.6rem; position: sticky; }
+  .topbar.has-menu .brand-name { display: none; }
+  .topbar.has-menu .topbar-search { order: 0; flex: 1; flex-basis: auto; }
+  .topbar.has-menu .menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: none;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .topbar.has-menu .topbar-nav { display: none; }
+  .topbar.has-menu.menu-open .topbar-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    position: absolute;
+    top: calc(100% + 1px);
+    right: 0.75rem;
+    min-width: 13rem;
+    padding: 0.35rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  }
+  .topbar.has-menu.menu-open .topbar-nav > a,
+  .topbar.has-menu.menu-open .topbar-nav .link-button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+  }
+  .topbar.has-menu.menu-open .topbar-nav .session-pill { margin: 0.35rem 0.75rem; width: auto; align-self: flex-start; }
+  .topbar.has-menu.menu-open .topbar-nav .logout-form { display: block; border-top: 1px solid var(--border); margin-top: 0.25rem; padding-top: 0.25rem; }
+
+  .list-toolbar { gap: 0.6rem; margin-top: -0.75rem; }
+}
