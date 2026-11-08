@@ -1,0 +1,28 @@
+@model FolderNode
+@if (Model.Children.Count > 0)
+{
+    <ul>
+        @foreach (var child in Model.Children)
+        {
+            <li>
+                @if (child.Children.Count > 0)
+                {
+                    <details open="@child.IsOpen">
+                        <summary>
+                            <a href="@Display.BrowseUrl(child.Path)" aria-current="@(child.IsCurrent ? "page" : null)">@child.Name</a>
+                            <span class="count">@child.ModelCount</span>
+                        </summary>
+                        <partial name="_FolderTree" model="child" />
+                    </details>
+                }
+                else
+                {
+                    <div class="leaf">
+                        <a href="@Display.BrowseUrl(child.Path)" aria-current="@(child.IsCurrent ? "page" : null)">@child.Name</a>
+                        <span class="count">@child.ModelCount</span>
+                    </div>
+                }
+            </li>
+        }
+    </ul>
+}

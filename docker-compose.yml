@@ -1,0 +1,34 @@
+# Production: VM 130 on Proxmox (192.168.2.213), library from the Synology over NFS (read-only).
+# Lives in /opt/3mf-library on the VM; ./data holds the index and preview cache.
+services:
+  3mf-library:
+    # Built on the Mac with Podman and copied over (see README); never pulled from a registry.
+    image: localhost/3mf-library:latest
+    pull_policy: never
+    container_name: 3mf-library
+    user: "1000:1000"
+    ports:
+      - "8085:8080"
+    environment:
+      SITE_TITLE: "3D Print library"
+      SCAN_INTERVAL: "00:03:00"
+      IGNORE: "datapackage.json;._*;@eaDir;#recycle;#snapshot;Thumbs.db;desktop.ini;*.tmp"
+    volumes:
+      - library:/library:ro
+      - ./data:/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  library:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=192.168.2.13,nfsvers=4.1,ro,soft,timeo=100"
+      device: ":/volume1/3dprinting"

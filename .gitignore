@@ -1,0 +1,17 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+.DS_Store
+TestResults/
+
+# Local runtime data (SQLite index + preview cache)
+/data/
+/dev-library/
+
+# Secrets / local config
+.env
+.env.*
+appsettings.Local.json
+/data-container/

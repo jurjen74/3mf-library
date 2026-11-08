@@ -1,0 +1,58 @@
+namespace Library.Web.Indexing;
+
+public sealed record IndexerStatus(bool Scanning, DateTimeOffset? LastFinished, ScanResult? LastResult);
+
+/// <summary>Scans at startup, then every <see cref="LibraryOptions.ScanInterval"/> or when asked to.</summary>
+public sealed class IndexerService(LibraryScanner scanner, LibraryOptions options, ILogger<IndexerService> log) : BackgroundService
+{
+    private readonly SemaphoreSlim _trigger = new(0, 1);
+
+    public IndexerStatus Status { get; private set; } = new(false, null, null);
+
+    /// <summary>Starts a scan now (or right after the one in progress). Repeated requests collapse into one.</summary>
+    public void RequestScan()
+    {
+        if (_trigger.CurrentCount == 0)
+        {
+            try
+            {
+                _trigger.Release();
+            }
+            catch (SemaphoreFullException)
+            {
+                // Another request got there first.
+            }
+        }
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            Status = Status with { Scanning = true };
+            try
+            {
+                var result = await Task.Run(() => scanner.Scan(stoppingToken), stoppingToken);
+                Status = new IndexerStatus(false, DateTimeOffset.UtcNow, result);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "Library scan failed");
+                Status = Status with { Scanning = false };
+            }
+
+            try
+            {
+                await _trigger.WaitAsync(options.ScanInterval, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+}

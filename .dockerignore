@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/TestResults/
+.git/
+.vs/
+.idea/
+data/
+dev-library/
+tests/
+*.md
+data-container/
+compose*.yml
+docker-compose.yml

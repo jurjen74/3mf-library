@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5180",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "LIBRARY_PATH": "../../dev-library",
+        "DATA_PATH": "../../data",
+        "SCAN_INTERVAL": "00:01:00"
+      }
+    }
+  }
+}
