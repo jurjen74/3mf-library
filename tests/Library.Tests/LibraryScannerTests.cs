@@ -1,6 +1,7 @@
 using Library.Web;
 using Library.Web.Data;
 using Library.Web.Indexing;
+using Library.Web.Meshes;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Library.Tests;
@@ -36,7 +37,7 @@ public sealed class LibraryScannerTests : IDisposable
     {
         Write("Stuff/Lamp.3mf", TestThreeMf.Bambu("Lampshade 5.0"));
         Write("Stuff/Deep/Prusa.3mf", TestThreeMf.Prusa());
-        Write("Stuff/part.stl", [1, 2, 3]);
+        Write("Stuff/part.stl", TestMeshes.BinaryStl());
         Write("Stuff/datapackage.json", "{}"u8.ToArray());
         Write("Stuff/@eaDir/Lamp.3mf/SYNOFILE_THUMB_M.jpg", [1]);
 
@@ -193,6 +194,49 @@ public sealed class LibraryScannerTests : IDisposable
         Assert.Equal(1, result.Deferred);
         Assert.NotNull(_queries.FindFile("Done.3mf"));
         Assert.Null(_queries.FindFile("Syncing.3mf"));
+    }
+
+    [Fact]
+    public void Renders_previews_and_measures_stls_and_bare_geometry_3mfs()
+    {
+        Write("Parts/cube.stl", TestMeshes.BinaryStl(size: 12.5f));
+        Write("Parts/geometry.3mf", TestMeshes.CoreThreeMf());
+        Write("Parts/broken.stl", "not an stl at all"u8.ToArray());
+
+        var result = _scanner.Scan(CancellationToken.None);
+
+        var cube = _queries.FindFile("Parts/cube.stl")!;
+        Assert.Equal(("render.png", "render_small.png"), (cube.Cover, cube.CoverSmall));
+        Assert.Equal((12.5, 12.5, 12.5, 12L), (cube.DimX, cube.DimY, cube.DimZ, cube.Triangles));
+        Assert.True(new FileInfo(Path.Combine(_options.CachePath, cube.CacheKey!, "render.png")).Length > 100);
+
+        var geometry = _queries.FindFile("Parts/geometry.3mf")!;
+        Assert.Equal("render.png", geometry.Cover);
+        Assert.Equal(40, geometry.DimX);
+
+        Assert.NotNull(_queries.FindFile("Parts/broken.stl")!.Error);
+        Assert.Equal(1, result.Errors);
+    }
+
+    [Fact]
+    public async Task Builds_and_caches_viewer_meshes_on_request()
+    {
+        Write("Lamp.3mf", TestMeshes.BambuThreeMf());
+        Write("cube.stl", TestMeshes.BinaryStl());
+        _scanner.Scan(CancellationToken.None);
+        var meshes = new MeshService(_options, _queries, new LibraryPaths(_options), NullLogger<MeshService>.Instance);
+        var lampKey = _queries.FindFile("Lamp.3mf")!.CacheKey!;
+        var cubeKey = _queries.FindFile("cube.stl")!.CacheKey!;
+
+        var plate = await meshes.GetAsync(lampKey, "plate_2", CancellationToken.None);
+        var model = await meshes.GetAsync(cubeKey, "model", CancellationToken.None);
+        var again = await meshes.GetAsync(lampKey, "plate_2", CancellationToken.None);
+
+        Assert.True(File.Exists(plate.Path));
+        Assert.True(File.Exists(model.Path));
+        Assert.Equal(plate.Path, again.Path);
+        Assert.Null((await meshes.GetAsync(lampKey, "../../etc", CancellationToken.None)).Path);
+        Assert.Null((await meshes.GetAsync("0000000000000000", "model", CancellationToken.None)).Path);
     }
 
     [Fact]

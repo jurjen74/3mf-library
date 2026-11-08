@@ -24,6 +24,10 @@ public sealed class FileRow
     public string? Cover { get; init; }
     public string? CoverSmall { get; init; }
     public string? Error { get; init; }
+    public double? DimX { get; init; }
+    public double? DimY { get; init; }
+    public double? DimZ { get; init; }
+    public long? Triangles { get; init; }
 
     public IReadOnlyList<string> ColourList => Colours is null
         ? []

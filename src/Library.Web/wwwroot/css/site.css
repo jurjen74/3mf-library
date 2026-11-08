@@ -502,6 +502,54 @@ a.card-thumb:hover img { transform: scale(1.03); }
   font-size: 0.85rem;
 }
 
+.stage-3d {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 68vh;
+  background: var(--thumb);
+  cursor: grab;
+  touch-action: none;
+}
+.stage-3d:active { cursor: grabbing; }
+.stage-3d[hidden],
+.stage > img[hidden] { display: none; }
+.stage-3d canvas { display: block; width: 100%; height: 100%; }
+.stage-status {
+  position: absolute;
+  inset: auto 0 1rem;
+  margin: 0 auto;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  padding: 0.45rem 0.8rem;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  font-size: 0.82rem;
+  text-align: center;
+}
+.stage-status:empty { display: none; }
+.stage figcaption { align-items: center; }
+.stage-meta { display: inline-flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.toggle-3d {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.toggle-3d[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) {
+  .toggle-3d[aria-pressed="true"] { color: #0d1526; }
+}
+
 .plate-strip {
   list-style: none;
   margin: 0.75rem 0 0;

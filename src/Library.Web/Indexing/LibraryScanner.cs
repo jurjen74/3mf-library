@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Dapper;
 using Library.Web.Data;
+using Library.Web.Meshes;
 using Microsoft.Data.Sqlite;
 
 namespace Library.Web.Indexing;
@@ -30,9 +31,11 @@ public sealed record ScanResult(
 public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, LibraryPaths paths, ILogger<LibraryScanner> log)
 {
     /// <summary>Bump when extraction changes, so every file is re-read once.</summary>
-    public const int IndexerVersion = 2;
+    public const int IndexerVersion = 3;
 
     private const long MaxImageBytes = 16L * 1024 * 1024;
+    private const long MaxStlBytes = 1024L * 1024 * 1024;
+    private const int PreviewSize = 512;
 
     private readonly IgnoreMatcher _ignore = new(options.Ignore);
     private readonly DescriptionSanitizer _sanitizer = new();
@@ -222,23 +225,38 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
                 photos.Clear();
             }
         }
+        else if (record.Kind == FileKinds.Stl)
+        {
+            try
+            {
+                ReadStl(file, record);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.LogWarning("Could not read {Path}: {Message}", file.Path, ex.Message);
+                record.Error = ex.Message;
+                record.CacheKey = null;
+                record.Cover = record.CoverSmall = null;
+            }
+        }
 
         using (var transaction = connection.BeginTransaction())
         {
             var id = connection.ExecuteScalar<long>("""
                 INSERT INTO files (path, folder, name, kind, size, mtime, indexer_version, cache_key, title, designer,
                                    license, description, application, created, plate_count, photo_count, colours, cover,
-                                   cover_small, error, indexed_at)
+                                   cover_small, dim_x, dim_y, dim_z, triangles, error, indexed_at)
                 VALUES (@Path, @Folder, @Name, @Kind, @Size, @Mtime, @IndexerVersion, @CacheKey, @Title, @Designer,
                         @License, @Description, @Application, @Created, @PlateCount, @PhotoCount, @Colours, @Cover,
-                        @CoverSmall, @Error, @IndexedAt)
+                        @CoverSmall, @DimX, @DimY, @DimZ, @Triangles, @Error, @IndexedAt)
                 ON CONFLICT (path) DO UPDATE SET
                     folder = excluded.folder, name = excluded.name, kind = excluded.kind, size = excluded.size,
                     mtime = excluded.mtime, indexer_version = excluded.indexer_version, cache_key = excluded.cache_key,
                     title = excluded.title, designer = excluded.designer, license = excluded.license,
                     description = excluded.description, application = excluded.application, created = excluded.created,
                     plate_count = excluded.plate_count, photo_count = excluded.photo_count, colours = excluded.colours,
-                    cover = excluded.cover, cover_small = excluded.cover_small, error = excluded.error,
+                    cover = excluded.cover, cover_small = excluded.cover_small, dim_x = excluded.dim_x,
+                    dim_y = excluded.dim_y, dim_z = excluded.dim_z, triangles = excluded.triangles, error = excluded.error,
                     indexed_at = excluded.indexed_at
                 RETURNING id
                 """, record, transaction);
@@ -355,6 +373,12 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
 
             record.PhotoCount = photos.Count;
 
+            // No image anywhere in the file (a bare geometry export): draw one from the meshes.
+            if (record.Cover is null)
+            {
+                TryRenderGeometry(zip, staging, file, record);
+            }
+
             var target = Path.Combine(options.CachePath, key);
             if (Directory.Exists(target))
             {
@@ -369,6 +393,73 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
             Directory.Delete(staging, recursive: true);
             throw;
         }
+    }
+
+    private void ReadStl(WalkedFile file, FileRecord record)
+    {
+        if (!paths.TryGetFullPath(file.Path, out var fullPath))
+        {
+            throw new IOException("Path is outside the library.");
+        }
+
+        if (file.Size > MaxStlBytes)
+        {
+            throw new InvalidDataException($"STL is larger than {MaxStlBytes / (1024 * 1024)} MB.");
+        }
+
+        var mesh = StlReader.Read(fullPath);
+        var key = CacheKey(file);
+        var staging = Path.Combine(options.CachePath, $"{key}.tmp-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(staging);
+        try
+        {
+            WritePreview(mesh, staging, record);
+            var target = Path.Combine(options.CachePath, key);
+            if (Directory.Exists(target))
+            {
+                Directory.Delete(target, recursive: true);
+            }
+
+            Directory.Move(staging, target);
+            record.CacheKey = key;
+        }
+        catch
+        {
+            Directory.Delete(staging, recursive: true);
+            throw;
+        }
+    }
+
+    private void TryRenderGeometry(ZipArchive zip, string staging, WalkedFile file, FileRecord record)
+    {
+        try
+        {
+            var mesh = ThreeMfMeshReader.Read(zip, plate: null);
+            if (mesh.TriangleCount > 0)
+            {
+                WritePreview(mesh, staging, record);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning("Could not render {Path}: {Message}", file.Path, ex.Message);
+        }
+    }
+
+    /// <summary>Renders <c>render.png</c> and <c>render_small.png</c> and records the model's size.</summary>
+    private static void WritePreview(Mesh mesh, string directory, FileRecord record)
+    {
+        var rgba = MeshRenderer.Render(mesh, PreviewSize);
+        PngWriter.Write(Path.Combine(directory, "render.png"), rgba, PreviewSize, PreviewSize);
+        PngWriter.Write(Path.Combine(directory, "render_small.png"), PngWriter.Downscale(rgba, PreviewSize, 4), PreviewSize / 4, PreviewSize / 4);
+
+        var size = mesh.Size();
+        record.Cover = "render.png";
+        record.CoverSmall = "render_small.png";
+        record.DimX = Math.Round(size.X, 2);
+        record.DimY = Math.Round(size.Y, 2);
+        record.DimZ = Math.Round(size.Z, 2);
+        record.Triangles = mesh.TriangleCount;
     }
 
     private void SyncFolders(SqliteConnection connection, WalkResult walk)
@@ -472,6 +563,10 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         public string? Colours { get; set; }
         public string? Cover { get; set; }
         public string? CoverSmall { get; set; }
+        public double? DimX { get; set; }
+        public double? DimY { get; set; }
+        public double? DimZ { get; set; }
+        public long? Triangles { get; set; }
         public string? Error { get; set; }
     }
 

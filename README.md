@@ -1,7 +1,8 @@
 # 3MF Library
 
 A self-hosted preview site for the 3D print folder. It shows the folders exactly as they are on disk, with a card per
-model using the plate previews Bambu Studio embeds in every 3MF, and download links. It's a single ASP.NET Core
+model using the plate previews Bambu Studio embeds in every 3MF (STLs and bare geometry get a rendered
+preview), a page per file with photos, description and a 3D viewer, search, and download links. It's a single ASP.NET Core
 (.NET 10) container that mounts the library **read-only**. See [PLAN.md](PLAN.md) for the design and milestones.
 
 ## Develop

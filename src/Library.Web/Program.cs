@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Library.Web;
 using Library.Web.Data;
 using Library.Web.Indexing;
+using Library.Web.Meshes;
 using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +17,7 @@ builder.Services.AddSingleton<LibraryPaths>();
 builder.Services.AddSingleton<LibraryQueries>();
 builder.Services.AddSingleton<LibraryScanner>();
 builder.Services.AddSingleton<IndexerService>();
+builder.Services.AddSingleton<MeshService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexerService>());
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(options.DataPath, "keys")))
@@ -71,6 +73,30 @@ app.MapGet("/img/{key}/{file}", (string key, string file, HttpContext context) =
 
     context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
     return Results.File(path, FileKinds.ContentType(file));
+});
+
+// Viewer meshes, built on first request and cached gzip-compressed; sent as-is with Content-Encoding.
+app.MapGet("/mesh/{key}/{name}.bin", async (string key, string name, MeshService meshes, HttpContext context, CancellationToken cancellationToken) =>
+{
+    if (!cacheKeyPattern.IsMatch(key) || !MeshService.IsValidName(name))
+    {
+        return Results.NotFound();
+    }
+
+    var result = await meshes.GetAsync(key, name, cancellationToken);
+    if (result.Error is not null)
+    {
+        return Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    if (result.Path is null)
+    {
+        return Results.NotFound();
+    }
+
+    context.Response.Headers.ContentEncoding = "gzip";
+    context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+    return Results.File(result.Path, "application/octet-stream");
 });
 
 // Only files the index knows about can be downloaded, so ignored files and anything outside the library stay out.

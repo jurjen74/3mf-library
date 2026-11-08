@@ -8,7 +8,8 @@ public sealed class LibraryQueries(LibraryDb db)
 {
     private const string FileColumns = """
         f.id, f.path, f.folder, f.name, f.kind, f.size, f.mtime, f.cache_key, f.title, f.designer, f.license,
-        f.application, f.created, f.plate_count, f.photo_count, f.colours, f.cover, f.cover_small, f.error
+        f.application, f.created, f.plate_count, f.photo_count, f.colours, f.cover, f.cover_small, f.error,
+        f.dim_x, f.dim_y, f.dim_z, f.triangles
         """;
 
     public IReadOnlyList<FolderRow> Folders()
@@ -31,6 +32,12 @@ public sealed class LibraryQueries(LibraryDb db)
     {
         using var connection = db.Open();
         return connection.QuerySingleOrDefault<FileRow>($"SELECT {FileColumns} FROM files f WHERE f.path = @path", new { path });
+    }
+
+    public FileRow? FindByCacheKey(string cacheKey)
+    {
+        using var connection = db.Open();
+        return connection.QuerySingleOrDefault<FileRow>($"SELECT {FileColumns} FROM files f WHERE f.cache_key = @cacheKey", new { cacheKey });
     }
 
     /// <summary>The sanitised description HTML, produced by the indexer.</summary>

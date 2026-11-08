@@ -9,7 +9,7 @@ namespace Library.Web.Data;
 /// </summary>
 public sealed class LibraryDb
 {
-    private const int SchemaVersion = 3;
+    private const int SchemaVersion = 4;
 
     private const string DropAll = """
         DROP TABLE IF EXISTS files_fts;
@@ -47,6 +47,10 @@ public sealed class LibraryDb
             colours         TEXT,
             cover           TEXT,
             cover_small     TEXT,
+            dim_x           REAL,
+            dim_y           REAL,
+            dim_z           REAL,
+            triangles       INTEGER,
             error           TEXT,
             indexed_at      INTEGER NOT NULL
         );

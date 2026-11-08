@@ -27,8 +27,79 @@
     }
   });
 
-  // File page: switch plates in place instead of reloading.
+  // File page: the 3D viewer, loaded only when asked for.
+  const figure = document.querySelector(".stage[data-mesh]");
   const stage = document.getElementById("stage-image");
+  const viewer3d = (() => {
+    const toggle = document.getElementById("toggle-3d");
+    const container = document.getElementById("stage-3d");
+    const status = document.getElementById("stage-status");
+    const details = document.getElementById("stage-details");
+    if (!figure || !toggle || !container) return null;
+
+    let viewer = null;
+    let loading = null;
+    let active = false;
+    let detailsText = details?.textContent ?? "";
+
+    const setStatus = (text) => {
+      status.textContent = text;
+      status.hidden = !text;
+    };
+
+    const load = async () => {
+      loading?.abort();
+      const controller = new AbortController();
+      loading = controller;
+      setStatus("Loading 3D model… large models can take a few seconds the first time.");
+      try {
+        if (!viewer) {
+          const { Viewer } = await import("/js/viewer.js");
+          viewer = new Viewer(container);
+        }
+        const result = await viewer.load(figure.dataset.mesh, controller.signal);
+        if (controller.signal.aborted) return;
+        if (result.triangles === 0) {
+          setStatus("Nothing on this plate.");
+        } else {
+          setStatus("");
+          const [x, y, z] = result.size.map((v) => (v < 10 ? v.toFixed(1) : Math.round(v)));
+          // STLs already show their size; plates only learn it from the mesh.
+          if (details && !detailsText.endsWith(" mm")) {
+            details.textContent = [detailsText, `${x} × ${y} × ${z} mm`].filter(Boolean).join(" · ");
+          }
+        }
+      } catch (error) {
+        if (error.name !== "AbortError") setStatus(error.message || "Could not load the 3D model.");
+      }
+    };
+
+    const show = (on) => {
+      active = on;
+      toggle.setAttribute("aria-pressed", String(on));
+      toggle.querySelector("span").textContent = on ? "Image" : "3D";
+      container.hidden = !on;
+      if (stage) stage.hidden = on;
+      if (on) {
+        load();
+      } else if (details) {
+        details.textContent = detailsText;
+      }
+    };
+
+    toggle.addEventListener("click", () => show(!active));
+    return {
+      // Called when another plate is picked; keeps the 3D view on the new plate.
+      setMesh(url, text) {
+        figure.dataset.mesh = url;
+        detailsText = text;
+        if (active) load();
+        else if (details) details.textContent = text;
+      },
+    };
+  })();
+
+  // File page: switch plates in place instead of reloading.
   const thumbs = document.querySelectorAll(".plate-thumb");
   if (stage && thumbs.length) {
     const label = document.getElementById("stage-label");
@@ -38,7 +109,8 @@
       stage.src = thumb.dataset.src;
       stage.alt = thumb.dataset.label;
       if (label) label.textContent = thumb.dataset.label;
-      if (details) details.textContent = thumb.dataset.details;
+      if (viewer3d && thumb.dataset.mesh) viewer3d.setMesh(thumb.dataset.mesh, thumb.dataset.details);
+      else if (details) details.textContent = thumb.dataset.details;
       if (objects) {
         objects.textContent = thumb.dataset.objects;
         objects.parentElement.hidden = !thumb.dataset.objects;

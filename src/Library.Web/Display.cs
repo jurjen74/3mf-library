@@ -28,6 +28,13 @@ public static class Display
     public static string Grams(double grams) =>
         grams.ToString(grams < 10 ? "0.#" : "0", CultureInfo.InvariantCulture) + " g";
 
+    /// <summary>"105 × 105 × 177 mm".</summary>
+    public static string Dimensions(double x, double y, double z) =>
+        string.Create(CultureInfo.InvariantCulture, $"{Millimetres(x)} × {Millimetres(y)} × {Millimetres(z)} mm");
+
+    private static string Millimetres(double value) =>
+        value.ToString(value < 10 ? "0.#" : "0", CultureInfo.InvariantCulture);
+
     public static string Date(DateTimeOffset moment) =>
         moment.ToLocalTime().ToString("d MMM yyyy", CultureInfo.InvariantCulture);
 
