@@ -56,6 +56,31 @@
     });
   }
 
+  // Light/dark: the header button flips between the two; Account → Appearance can go back to the system setting.
+  const theme = window.libraryTheme;
+  const themeToggle = document.querySelector(".theme-toggle");
+  const themeChoice = document.getElementById("theme-choice");
+  if (theme) {
+    const showTheme = () => {
+      const dark = theme.effective() === "dark";
+      if (themeToggle) {
+        const label = dark ? "Light mode" : "Dark mode";
+        themeToggle.dataset.current = dark ? "dark" : "light";
+        themeToggle.title = `Switch to ${label.toLowerCase()}`;
+        themeToggle.setAttribute("aria-label", `Switch to ${label.toLowerCase()}`);
+        themeToggle.querySelector(".theme-label").textContent = label;
+      }
+      if (themeChoice) themeChoice.value = theme.choice();
+    };
+    themeToggle?.addEventListener("click", () => theme.set(theme.effective() === "dark" ? "light" : "dark"));
+    themeChoice?.addEventListener("change", () => theme.set(themeChoice.value));
+    document.addEventListener("library:theme", showTheme);
+    if (themeToggle) themeToggle.hidden = false;
+    const appearance = document.getElementById("appearance");
+    if (appearance) appearance.hidden = false;
+    showTheme();
+  }
+
   // Phones: a long breadcrumb shows "Library / … / parent / here"; the "…" unfolds the whole path.
   document.querySelector(".crumb-more button")?.addEventListener("click", (event) => {
     event.currentTarget.closest(".crumbs")?.classList.add("crumbs--full");

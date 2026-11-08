@@ -12,11 +12,14 @@
   --warn: #b4441c;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 4px 14px rgb(0 0 0 / 0.04);
   --radius: 12px;
+  --on-accent: #fff;
   color-scheme: light dark;
 }
 
+/* Dark colours: from the system setting, unless this browser chose a theme (data-theme on <html>, set by
+   js/theme.js from localStorage "library.theme"). Keep the two copies below the same. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #131416;
     --surface: #1b1c1f;
     --surface-2: #24262a;
@@ -28,8 +31,26 @@
     --accent-soft: #1e2a42;
     --warn: #f08a5d;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    --on-accent: #0d1526;
+    color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #131416;
+  --surface: #1b1c1f;
+  --surface-2: #24262a;
+  --thumb: radial-gradient(circle at 50% 42%, #6b6e74 0%, #45484e 85%);
+  --text: #ebeae6;
+  --muted: #9b9891;
+  --border: #2d2f34;
+  --accent: #7ea8ff;
+  --accent-soft: #1e2a42;
+  --warn: #f08a5d;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  --on-accent: #0d1526;
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
 
@@ -435,10 +456,7 @@ a.card-thumb:hover img { transform: scale(1.03); }
   cursor: pointer;
 }
 .button:hover { text-decoration: none; filter: brightness(0.97); }
-.button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-@media (prefers-color-scheme: dark) {
-  .button.primary { color: #0d1526; }
-}
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 .icon-button {
   display: inline-flex;
@@ -558,10 +576,7 @@ a.card-thumb:hover img { transform: scale(1.03); }
   font-weight: 650;
   cursor: pointer;
 }
-.toggle-3d[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-@media (prefers-color-scheme: dark) {
-  .toggle-3d[aria-pressed="true"] { color: #0d1526; }
-}
+.toggle-3d[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 .plate-strip {
   list-style: none;
@@ -1050,4 +1065,38 @@ details.reset > summary::-webkit-details-marker { display: none; }
   .topbar.has-menu.menu-open .topbar-nav .logout-form { display: block; border-top: 1px solid var(--border); margin-top: 0.25rem; padding-top: 0.25rem; }
 
   .list-toolbar { gap: 0.6rem; margin-top: -0.75rem; }
+}
+
+/* Light/dark button in the header: an icon on wide screens, icon and words in the phone menu. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.theme-toggle[hidden] { display: none; }
+.theme-toggle:hover { background: var(--surface-2); }
+.theme-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.theme-icon { display: none; }
+.theme-toggle[data-current="dark"] .theme-icon--sun,
+.theme-toggle[data-current="light"] .theme-icon--moon { display: block; }
+
+@media (max-width: 800px) {
+  .topbar.has-menu.menu-open .topbar-nav .theme-toggle {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.95rem;
+    border-bottom: 1px solid var(--border);
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 0.25rem;
+  }
+  .topbar.has-menu.menu-open .theme-label { position: static; width: auto; height: auto; clip-path: none; }
 }

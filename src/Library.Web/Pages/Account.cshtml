@@ -56,6 +56,19 @@
 
     @if (!Model.Required)
     {
+        @* Shown by site.js; stored in this browser (theme.js), so a phone and a computer can differ. *@
+        <section class="login-card account-card device-settings" id="appearance" hidden>
+            <h2>Appearance</h2>
+            <label>
+                <span>Theme on this device</span>
+                <select id="theme-choice">
+                    <option value="system">Same as the system</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </label>
+        </section>
+
         @* Shown by site.js on computers (mouse or trackpad) only; the choice is stored in this browser, not the account. *@
         <section class="login-card account-card device-settings" id="this-computer" hidden>
             <h2>This computer</h2>

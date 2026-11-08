@@ -64,7 +64,8 @@ src/Library.Web/
   Auth/                 UserStore (users.db), FavouriteStore, Session (cookie, security stamp, forced change), TrustedNetwork
   Pages/                Browse, File, Search, Recent, Favourites, Login, Setup, Account, Users, Logout, Error
                         Shared/ModelListView: ?sort= / ?type= (3mf|stl) as plain links; Browse ?all=1 = include subfolders
-  wwwroot/              css/site.css, js/site.js (classic), js/viewer.js (ES module), lib/three (three.js 0.186.1, vendored), icons/
+  wwwroot/              css/site.css, js/site.js (classic), js/theme.js (in <head>: light/dark choice, localStorage
+                        `library.theme`), js/viewer.js (ES module), lib/three (three.js 0.186.1, vendored), icons/
 tests/Library.Tests/    xUnit v3 (Microsoft Testing Platform); synthetic fixtures only (TestThreeMf, TestMeshes)
 tools/mac-opener/       macOS helper for threemflib:// links: build.sh (osacompile + URL scheme + ad-hoc sign),
                         opener.applescript, open-model.sh (decoding, checks; DRY_RUN=1 / LIBRARY_ROOT for testing)
