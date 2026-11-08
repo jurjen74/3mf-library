@@ -48,6 +48,20 @@ ssh jurjenladenius@192.168.2.213 'cd /opt/3mf-library && docker compose up -d &&
 The site is at `http://192.168.2.213:8085`. The NFS volume in `docker-compose.yml` mounts
 `192.168.2.13:/volume1/3dprinting` read-only.
 
+## Accounts and Nginx Proxy Manager
+
+Everything is behind a login, except direct visitors from `TRUSTED_NETWORKS` (the home LAN). A request that arrives
+through a proxy always needs the login, even when it says it comes from the LAN.
+
+**First run:** open the site from the home network (`http://192.168.2.213:8085`) and create the first account on the
+page it shows (or via the "No account yet" banner). Only direct visitors from the home network can do this, never
+through the proxy. Accounts live in `data/users.db` with hashed passwords; change yours under the user name in the top
+bar (this logs out your other devices). Forgot it? Stop the container, delete `data/users.db`, and set up again.
+
+**Proxy host in Nginx Proxy Manager:** forward `http://192.168.2.213:8085`, request a Let's Encrypt certificate
+with Force SSL, keep *Cache Assets* off, and set `KNOWN_PROXIES=<npm-ip>` in `/opt/3mf-library/.env` so the app sees
+the visitor's real address and that the connection is HTTPS (secure cookie, per-visitor rate limit on logins).
+
 ## Configuration
 
 | Variable | Default | |
@@ -58,5 +72,7 @@ The site is at `http://192.168.2.213:8085`. The NFS volume in `docker-compose.ym
 | `SETTLE_DELAY` | `00:00:10` | A new or changed file is only read once its size and time stay the same this long (Cloud Sync writes in parts) |
 | `IGNORE` | see `LibraryOptions` | `;`-separated name globs to skip; dotfiles are always skipped |
 | `SITE_TITLE` | `3D Print library` | |
+| `TRUSTED_NETWORKS` | – | `;`-separated networks whose direct visitors need no login, e.g. `192.168.2.0/24` |
+| `KNOWN_PROXIES` | – | Proxy IPs whose `X-Forwarded-For`/`-Proto` are believed (in `.env`) |
 
 The index is a cache: stop the container, delete `data/library.db*` and `data/cache/`, and the next start rebuilds both.

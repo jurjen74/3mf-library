@@ -10,7 +10,8 @@
         "LIBRARY_PATH": "../../dev-library",
         "DATA_PATH": "../../data",
         "SCAN_INTERVAL": "00:01:00",
-        "SETTLE_DELAY": "00:00:02"
+        "SETTLE_DELAY": "00:00:02",
+        "TRUSTED_NETWORKS": "127.0.0.0/8;::1/128"
       }
     }
   }

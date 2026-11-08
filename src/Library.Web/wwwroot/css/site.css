@@ -697,6 +697,52 @@ a.card-thumb:hover img { transform: scale(1.03); }
 .folder-results svg { color: var(--muted); flex: none; }
 .folder-results .muted { white-space: nowrap; font-size: 0.78rem; }
 
+/* Session */
+.logout-form { margin: 0; }
+.session-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* Login */
+.login-page { display: flex; justify-content: center; padding-top: 8vh; }
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.75rem 1.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.login-card h1 { font-size: 1.3rem; margin: 0 0 0.25rem; }
+.login-logo { color: var(--accent); }
+.login-card label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); }
+.login-card input[type="text"],
+.login-card input[type="password"],
+.login-card input:not([type]) {
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.login-card input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.login-card .remember { flex-direction: row; align-items: center; gap: 0.5rem; color: var(--text); }
+.login-card .button { justify-content: center; margin-top: 0.25rem; }
+.login-error { margin: 0; color: var(--warn); font-size: 0.88rem; }
+.login-card .notice { margin: 0; font-size: 0.85rem; }
+
 @media (max-width: 1000px) {
   .file-layout { grid-template-columns: minmax(0, 1fr); }
 }
@@ -725,3 +771,13 @@ a.card-thumb:hover img { transform: scale(1.03); }
   .folder-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; }
   .topbar { padding: 0.65rem 1rem; }
 }
+
+/* First-run hint and account page */
+.setup-banner {
+  padding: 0.55rem 1.25rem;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+}
+.account-card { max-width: 420px; }
+.account-card h2 { font-size: 1.05rem; margin: 0; }

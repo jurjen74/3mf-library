@@ -1,6 +1,8 @@
 @page
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 @{
     ViewData["Title"] = "Error";
+    ViewData["Anonymous"] = true;
 }
 <main class="content">
     <h1>Something went wrong</h1>

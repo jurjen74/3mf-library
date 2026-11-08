@@ -9,10 +9,18 @@ services:
     user: "1000:1000"
     ports:
       - "8085:8080"
+    # Per-server settings in /opt/3mf-library/.env (not in git, not overwritten by deploys):
+    #   KNOWN_PROXIES=<IP of the Nginx Proxy Manager LXC>, once it proxies this site.
+    # Accounts are created in the site itself (first run) and stored in ./data/users.db.
+    env_file:
+      - path: .env
+        required: false
     environment:
       SITE_TITLE: "3D Print library"
       SCAN_INTERVAL: "00:03:00"
       IGNORE: "datapackage.json;._*;@eaDir;#recycle;#snapshot;Thumbs.db;desktop.ini;*.tmp"
+      # Direct visitors from here need no login. Requests through a proxy always do.
+      TRUSTED_NETWORKS: "192.168.2.0/24"
     volumes:
       - library:/library:ro
       - ./data:/data

@@ -1,9 +1,14 @@
 using System.Text.RegularExpressions;
+using System.Threading.RateLimiting;
 using Library.Web;
+using Library.Web.Auth;
 using Library.Web.Data;
 using Library.Web.Indexing;
 using Library.Web.Meshes;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,16 +23,82 @@ builder.Services.AddSingleton<LibraryQueries>();
 builder.Services.AddSingleton<LibraryScanner>();
 builder.Services.AddSingleton<IndexerService>();
 builder.Services.AddSingleton<MeshService>();
+builder.Services.AddSingleton<UserStore>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexerService>());
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(options.DataPath, "keys")))
     .SetApplicationName("3mf-library");
+
+// Accounts from users.db; the login cookie lasts 30 days (sliding) and dies when the password changes.
+// Every endpoint needs a login unless marked anonymous.
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(cookie =>
+    {
+        cookie.LoginPath = "/login";
+        cookie.LogoutPath = "/logout";
+        cookie.Cookie.Name = "library.auth";
+        cookie.Cookie.HttpOnly = true;
+        cookie.Cookie.SameSite = SameSiteMode.Lax;
+        cookie.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        cookie.ExpireTimeSpan = TimeSpan.FromDays(30);
+        cookie.SlidingExpiration = true;
+        cookie.Events.OnValidatePrincipal = Session.ValidateAsync;
+    });
+builder.Services.AddAuthorization(authorization =>
+    authorization.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+
+// Only addresses in KNOWN_PROXIES may set X-Forwarded-For/-Proto; anyone else's headers are ignored.
+builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>
+{
+    forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    forwarded.ForwardLimit = 1;
+    forwarded.KnownProxies.Clear();
+    forwarded.KnownIPNetworks.Clear();
+    foreach (var proxy in options.KnownProxies)
+    {
+        forwarded.KnownProxies.Add(proxy);
+    }
+});
+
+builder.Services.AddRateLimiter(limiter =>
+{
+    limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    limiter.AddPolicy("login", context => HttpMethods.IsPost(context.Request.Method)
+        ? RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 8, Window = TimeSpan.FromMinutes(5), QueueLimit = 0 })
+        : RateLimitPartition.GetNoLimiter("read"));
+    limiter.OnRejected = async (rejected, cancellationToken) =>
+    {
+        rejected.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
+        await rejected.HttpContext.Response.WriteAsync("Too many login attempts. Try again in a few minutes.", cancellationToken);
+    };
+});
+
 builder.Services.AddRazorPages();
 
 var app = builder.Build();
 app.Services.GetRequiredService<LibraryDb>().Migrate();
-app.Logger.LogInformation("Library: {Library}  Data: {Data}  Scan interval: {Interval}",
-    options.LibraryPath, options.DataPath, options.ScanInterval);
+var users = app.Services.GetRequiredService<UserStore>();
+users.Migrate();
+app.Logger.LogInformation(
+    "Library: {Library}  Data: {Data}  Scan interval: {Interval}  Accounts: {Accounts}  Trusted networks: {Trusted}  Known proxies: {Proxies}",
+    options.LibraryPath, options.DataPath, options.ScanInterval,
+    users.HasUsers() ? "set up" : "none yet (first-run setup open to the home network)",
+    options.TrustedNetworks.Count == 0 ? "none" : string.Join(", ", options.TrustedNetworks),
+    options.KnownProxies.Count == 0 ? "none" : string.Join(", ", options.KnownProxies));
+
+app.Use(async (context, next) =>
+{
+    TrustedNetwork.RecordConnection(context);
+    await next();
+});
+
+// With an empty KnownProxies list the middleware would believe X-Forwarded-For from anyone, so it only runs when a
+// proxy is configured.
+if (options.KnownProxies.Count > 0)
+{
+    app.UseForwardedHeaders();
+}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -44,7 +115,18 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.MapStaticAssets();
+app.UseRouting();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    TrustedNetwork.SignInIfTrusted(context, options);
+    await next();
+});
+app.UseAuthorization();
+
+// The login page needs its CSS before anyone is logged in.
+app.MapStaticAssets().AllowAnonymous();
 
 app.MapGet("/", () => Results.Redirect("/browse"));
 
@@ -53,9 +135,10 @@ app.MapGet("/health", (IndexerService indexer) => Results.Ok(new
     status = "ok",
     lastScan = indexer.Status.LastFinished,
     libraryOnline = indexer.Status.LastResult?.LibraryOnline,
-}));
+})).AllowAnonymous();
 
-// Previews extracted into the cache. The key changes whenever the file does, so they can be cached forever.
+// Previews extracted into the cache. The key changes whenever the file does, so they can be cached forever —
+// privately: they sit behind the login and must not end up in a shared (proxy) cache.
 var cacheKeyPattern = new Regex("^[0-9a-f]{16}$", RegexOptions.CultureInvariant);
 var cacheFilePattern = new Regex(@"^[a-z0-9_]{1,64}\.(png|jpg|webp)$", RegexOptions.CultureInvariant);
 app.MapGet("/img/{key}/{file}", (string key, string file, HttpContext context) =>
@@ -71,7 +154,7 @@ app.MapGet("/img/{key}/{file}", (string key, string file, HttpContext context) =
         return Results.NotFound();
     }
 
-    context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+    context.Response.Headers.CacheControl = "private, max-age=31536000, immutable";
     return Results.File(path, FileKinds.ContentType(file));
 });
 
@@ -95,7 +178,7 @@ app.MapGet("/mesh/{key}/{name}.bin", async (string key, string name, MeshService
     }
 
     context.Response.Headers.ContentEncoding = "gzip";
-    context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+    context.Response.Headers.CacheControl = "private, max-age=31536000, immutable";
     return Results.File(result.Path, "application/octet-stream");
 });
 
@@ -116,3 +199,6 @@ app.MapGet("/download/{**path}", (string? path, LibraryQueries queries, LibraryP
 app.MapRazorPages();
 
 app.Run();
+
+/// <summary>Exposed for the end-to-end tests (WebApplicationFactory).</summary>
+public partial class Program;

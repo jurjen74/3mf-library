@@ -1,0 +1,48 @@
+@page "/account"
+@model AccountModel
+
+<main class="content">
+    <h1>Account</h1>
+
+    @if (Model.Account is null)
+    {
+        <p>You're using the library from the home network, so you don't need to log in here.</p>
+        @if (!Model.HasAccounts)
+        {
+            <p>To open it from outside your home, <a href="/setup">create an account</a>.</p>
+        }
+        else
+        {
+            <p class="muted">To change a password, <a href="/login">log in</a> with that account first.</p>
+        }
+    }
+    else
+    {
+        <p class="muted lead">Logged in as <strong>@Model.Account.UserName</strong>@(Model.Account.IsAdmin ? " (admin)" : "").</p>
+
+        <form class="login-card account-card" method="post">
+            <h2>Change password</h2>
+            @if (Model.Changed)
+            {
+                <p class="notice" role="status">Password changed. Other devices have been logged out.</p>
+            }
+            @if (Model.Error is not null)
+            {
+                <p class="login-error" role="alert">@Model.Error</p>
+            }
+            <label>
+                <span>Current password</span>
+                <input asp-for="CurrentPassword" type="password" autocomplete="current-password" required>
+            </label>
+            <label>
+                <span>New password <small class="muted">(at least @UserStore.MinimumPasswordLength characters)</small></span>
+                <input asp-for="NewPassword" type="password" autocomplete="new-password" minlength="@UserStore.MinimumPasswordLength" required>
+            </label>
+            <label>
+                <span>New password again</span>
+                <input asp-for="RepeatPassword" type="password" autocomplete="new-password" minlength="@UserStore.MinimumPasswordLength" required>
+            </label>
+            <button type="submit" class="button primary">Change password</button>
+        </form>
+    }
+</main>

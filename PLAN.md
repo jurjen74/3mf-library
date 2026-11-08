@@ -57,7 +57,7 @@ non-Bambu 3MFs.
 ## Architecture
 
 ```
- Internet ──► Nginx Proxy Manager (TLS, Let's Encrypt, models.ladenius.net)
+ Internet ──► Nginx Proxy Manager (TLS, Let's Encrypt, models.13thpenthouse.com)
                         │ http, X-Forwarded-For/Proto
                         ▼
  Proxmox (i9-12900H, 64 GB)
@@ -175,22 +175,23 @@ images are served with long-lived cache headers and ETags.
 Only you use it, so there's no sharing, no user management and no
 public pages.
 
-- **Login:** a single account set via env (`ADMIN_USER` plus a hashed
-  `ADMIN_PASSWORD_HASH`) using cookie auth with a long-lived "remember
-  me", so you log in once per device.
-- **Behind Nginx Proxy Manager:** `ForwardedHeaders` is enabled, but
-  only for the NPM address (`KNOWN_PROXIES=<npm-ip>`). That gives correct
-  client IPs, the `https` scheme and secure cookies
-  (`PUBLIC_BASE_URL=https://models.ladenius.net`). Nothing NPM-specific
-  is needed beyond a plain proxy host to `http://192.168.2.213:8085`
-  with "Block common exploits" on. No websockets and no uploads, so the
-  defaults are fine.
-- **Trusted networks (optional):** `TRUSTED_NETWORKS=192.168.2.0/24`
-  lets direct LAN visitors browse without logging in. **Pitfall:** every
-  external request reaches the app *from NPM's LAN address*. The check
-  must therefore use the forwarded client IP, and requests that arrived
-  via NPM never count as trusted. Simplest rule: request came through a
-  known proxy → login required.
+- **Accounts:** created in the site itself. On first run, a direct visitor
+  from the home network creates the first account (an admin); never
+  through the proxy. Stored in `data/users.db`, separate from the index
+  (which is a cache and gets rebuilt), with PBKDF2 hashes. Multi-user
+  ready (admin flag); a Users page to add/remove people is a later step.
+  Cookie for 30 days with a security stamp, so changing the password
+  logs out other devices. Forgot it: delete `users.db` and set up again.
+- **Behind Nginx Proxy Manager** (192.168.2.233, proxy host
+  `models.13thpenthouse.com` → `http://192.168.2.213:8085`):
+  `ForwardedHeaders` only runs when `KNOWN_PROXIES` is set, and then only
+  believes that address (an empty list would trust everyone). That gives
+  the visitor's real IP (per-visitor login rate limit) and the `https`
+  scheme (secure cookie). `KNOWN_PROXIES` lives in `/opt/3mf-library/.env`.
+- **Trusted network:** `TRUSTED_NETWORKS=192.168.2.0/24` lets direct LAN
+  visitors in without logging in. Every request through NPM reaches the
+  app from a LAN address, so any request carrying forwarding headers, or
+  coming from a known proxy, always needs the login.
 - **NPM access list (optional):** with no share links there's nothing
   that has to stay open, so NPM can also restrict the proxy host (e.g.
   basic auth or an IP allowlist) as a second gate in front of the app's
@@ -242,7 +243,7 @@ The app listens on `192.168.2.213:8085`. Only the NPM LXC and your LAN need
 to reach it. The step-by-step setup is in **Provisioning the VM (M0)**
 below.
 
-**Nginx Proxy Manager (LXC):** a proxy host `models.ladenius.net` →
+**Nginx Proxy Manager (LXC, 192.168.2.233):** a proxy host `models.13thpenthouse.com` →
 `http://192.168.2.213:8085`, with a Let's Encrypt certificate, Force SSL and
 Block common exploits. The LXC's IP goes into `KNOWN_PROXIES`.
 
@@ -250,7 +251,7 @@ Block common exploits. The LXC's IP goes into `KNOWN_PROXIES`.
 
 This can be done in parallel with M1, since it doesn't need any app
 code. VM ID **130**, MAC `BC:24:11:0E:B7:1D`, IP **192.168.2.213**
-(DHCP reservation). Still a placeholder: `<npm-ip>` (the NPM LXC).
+(DHCP reservation). Nginx Proxy Manager runs in its own LXC at 192.168.2.233.
 
 **1. Create the VM in Proxmox.** Upload `debian-13.7.0-amd64-netinst.iso`
 to `local` → ISO Images (or use *Download from URL* there, and check the
@@ -397,7 +398,7 @@ the bridge, outside the VM:
   Proxmox GUI (8006) and SSH.
 - VM 130 → Firewall → Options: Firewall **Yes**, Input policy **DROP**.
 - VM 130 → Firewall → Rules:
-  - `IN ACCEPT` from `<npm-ip>`, TCP 8085
+  - `IN ACCEPT` from `192.168.2.233` (NPM), TCP 8085
   - `IN ACCEPT` from `192.168.2.0/24`, TCP 8085 (direct LAN use)
   - `IN ACCEPT` from `192.168.2.0/24`, TCP 22
   - Outbound stays open (NFS to the NAS, apt, GHCR).
@@ -418,46 +419,11 @@ the bridge, outside the VM:
   refused or times out once something listens there (test this in M4);
 - the VM is in the backup job, and the `provisioned` snapshot exists.
 
-**Container configuration** (compose on the Docker VM; NFS mounted by
-Docker itself, so no `/etc/fstab` needed):
-
-```yaml
-services:
-  3mf-library:
-    image: ghcr.io/<you>/3mf-library:latest   # pin a version tag in practice
-    container_name: 3mf-library
-    user: "1000:1000"
-    ports:
-      - "8085:8080"
-    environment:
-      LIBRARY_PATH: /library
-      DATA_PATH: /data
-      SITE_TITLE: "3D Print library"
-      PUBLIC_BASE_URL: "https://models.ladenius.net"
-      KNOWN_PROXIES: "192.168.2.x"            # IP of the NPM LXC (fill in)
-      ADMIN_USER: jurjen
-      ADMIN_PASSWORD_HASH: "<generated by `docker run … hash-password`>"
-      TRUSTED_NETWORKS: "192.168.2.0/24"      # direct LAN only, see Access
-      SCAN_INTERVAL: "00:03:00"
-      IGNORE: "datapackage.json;.DS_Store;._*;@eaDir;#recycle"
-    volumes:
-      - library:/library:ro
-      - ./data:/data                          # SQLite + cache, on the VM disk
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
-
-volumes:
-  library:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=192.168.2.13,nfsvers=4.1,ro,soft,timeo=100"
-      device: ":/volume1/3dprinting"
-```
+**Container configuration:** see `docker-compose.yml` in the repository. It mounts
+`192.168.2.13:/volume1/3dprinting` read-only as an NFS volume (no `/etc/fstab`
+needed), keeps `./data` on the VM disk, runs as UID 1000 with a read-only root
+filesystem, no capabilities and `no-new-privileges`, and reads per-server settings
+(`KNOWN_PROXIES`) from an optional `.env` that deploys never overwrite.
 
 - `/data` lives on the VM's local disk, not on NFS. SQLite doesn't do
   well on network filesystems, and it lets Proxmox backups include it.
@@ -477,7 +443,7 @@ volumes:
 | **M1 — Browse** (1 weekend) | Project skeleton, Dockerfile, indexer for 3MF (metadata + plate PNGs), SQLite, Browse page with folder tree and card grid, Download | **Done 2026-11-08.** Running on VM 130 at `http://192.168.2.213:8085`: first NFS scan 3.3 s, 235 files in 57 folders, 0 errors; 119 of 120 3MFs have a preview (the Kintsu "(Geometry)" export has none embedded, so it waits for M3); 33 tests pass; library mount verified read-only, container runs as UID 1000 |
 | **M2 — Details & search** | Detail page (plates, photos, info, sanitised description, swatches, slice info), Search (FTS5), Recent, polling indexer with a stability check, attachments | **Built 2026-11-08.** File page with plate switcher (objects, print time and weight per plate when sliced), MakerWorld photo gallery with lightbox, sanitised description, previous/next in folder (← →); search over name, title, designer, folder, object names and description (FTS5, prefix match) plus folder matches; Recent page; 10 s settle check before reading new or changed files; orphaned-cache cleanup. Full library: 385 photos, 77 descriptions, 300 plates, 0 errors; 59 tests pass |
 | **M3 — STL & 3D** | CPU rasteriser for STL / image-less 3MF; plate→GLB export; three.js viewer tab | **Built 2026-11-08.** CPU renderer (no GPU, own PNG encoder) gives all 80 STLs and the Kintsu geometry 3MF a preview, with dimensions and triangle count; 3D tab on the file page (three.js 0.186.1, vendored) loads per-plate meshes built on first request, coloured by object filament and painted triangles, simplified to ≤ 750k triangles and cached (URBAN_MINNIE plate: 3.6M → 702k triangles in 3.2 s); 79 tests pass |
-| **M4 — Login & deploy** | Login, trusted networks, admin page, hardening, GitHub Actions → GHCR (amd64), compose with the NFS volume deployed to the M0 VM, NPM proxy host | Running on Proxmox behind NPM at `models.ladenius.net`; from a phone on 4G it asks for a login and then works; an external request is never treated as LAN; the library mount is verified read-only |
+| **M4 — Login & deploy** | Login, trusted networks, admin page, hardening, GitHub Actions → GHCR (amd64), compose with the NFS volume deployed to the M0 VM, NPM proxy host | **Login done 2026-11-08.** Accounts in `data/users.db` (separate from the index; multi-user ready with an admin flag), created on first run from the home network only, PBKDF2 hashes, 30-day cookie with a security stamp (changing the password logs out other devices), account page, rate-limited login/setup; direct visitors from 192.168.2.0/24 need no login, proxied requests always do; `KNOWN_PROXIES` in `.env`; previews/meshes `Cache-Control: private`; 116 tests. Live at https://models.13thpenthouse.com behind NPM (192.168.2.233, `KNOWN_PROXIES` set); account created. NPM: Force SSL, HTTP/2 and HSTS on (2026-11-08). Still to do: GitHub Actions → GHCR |
 | M5 — Nice to have | Share links, "Open in Bambu Studio", dimensions and triangle count, ZIP download of a folder, favourites, PWA icon, OIDC | — |
 
 ### Risks to check early (spikes in M1)
@@ -500,17 +466,14 @@ volumes:
 
 ## Open questions
 
-- The NPM LXC's IP?
 - **Cloud Sync doesn't pass deletions on** (confirmed 2026-11-08): the
   NAS has every OneDrive file with identical sizes, plus the 48
   `datapackage.json` files deleted from OneDrive the day before. Files
   deleted or renamed in OneDrive will therefore stay on the NAS and keep
   showing on the site. Check the Cloud Sync task (direction, and the
   option that keeps files removed at the source).
-- Hostname for the NPM proxy host (`models.ladenius.net` is a
-  placeholder)?
 
-Settled: no sharing for now (2026-11-07); the Manyfold
+Settled: no sharing for now (2026-11-07); public hostname `models.13thpenthouse.com` via Nginx Proxy Manager at 192.168.2.233 (2026-11-08); the Manyfold
 `datapackage.json` leftovers were deleted from OneDrive; VM 130 has
 been created with DHCP reservation `BC:24:11:0E:B7:1D` →
 192.168.2.213. M0 steps 1–5 and 7 passed on 2026-11-08: SSH is key-only,
