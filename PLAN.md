@@ -179,7 +179,7 @@ public pages.
   from the home network creates the first account (an admin); never
   through the proxy. Stored in `data/users.db`, separate from the index
   (which is a cache and gets rebuilt), with PBKDF2 hashes. Multi-user
-  ready (admin flag); a Users page to add/remove people is a later step.
+  ready (admin flag), managed by admins on the Users page.
   Cookie for 30 days with a security stamp, so changing the password
   logs out other devices. Forgot it: delete `users.db` and set up again.
 - **Behind Nginx Proxy Manager** (192.168.2.233, proxy host
@@ -444,7 +444,7 @@ filesystem, no capabilities and `no-new-privileges`, and reads per-server settin
 | **M2 — Details & search** | Detail page (plates, photos, info, sanitised description, swatches, slice info), Search (FTS5), Recent, polling indexer with a stability check, attachments | **Built 2026-11-08.** File page with plate switcher (objects, print time and weight per plate when sliced), MakerWorld photo gallery with lightbox, sanitised description, previous/next in folder (← →); search over name, title, designer, folder, object names and description (FTS5, prefix match) plus folder matches; Recent page; 10 s settle check before reading new or changed files; orphaned-cache cleanup. Full library: 385 photos, 77 descriptions, 300 plates, 0 errors; 59 tests pass |
 | **M3 — STL & 3D** | CPU rasteriser for STL / image-less 3MF; plate→GLB export; three.js viewer tab | **Built 2026-11-08.** CPU renderer (no GPU, own PNG encoder) gives all 80 STLs and the Kintsu geometry 3MF a preview, with dimensions and triangle count; 3D tab on the file page (three.js 0.186.1, vendored) loads per-plate meshes built on first request, coloured by object filament and painted triangles, simplified to ≤ 750k triangles and cached (URBAN_MINNIE plate: 3.6M → 702k triangles in 3.2 s); 79 tests pass |
 | **M4 — Login & deploy** | Login, trusted networks, admin page, hardening, GitHub Actions → GHCR (amd64), compose with the NFS volume deployed to the M0 VM, NPM proxy host | **Login done 2026-11-08.** Accounts in `data/users.db` (separate from the index; multi-user ready with an admin flag), created on first run from the home network only, PBKDF2 hashes, 30-day cookie with a security stamp (changing the password logs out other devices), account page, rate-limited login/setup; direct visitors from 192.168.2.0/24 need no login, proxied requests always do; `KNOWN_PROXIES` in `.env`; previews/meshes `Cache-Control: private`; 116 tests. Live at https://models.13thpenthouse.com behind NPM (192.168.2.233, `KNOWN_PROXIES` set); account created. NPM: Force SSL, HTTP/2 and HSTS on (2026-11-08). Still to do: GitHub Actions → GHCR |
-| M5 — Nice to have | Share links, "Open in Bambu Studio", dimensions and triangle count, ZIP download of a folder, favourites, PWA icon, OIDC | — |
+| M5 — Nice to have | ~~Users page~~ (done 2026-11-08: add, reset password, admin on/off, delete; last admin protected; optional forced password change at next login, default on), share links, "Open in Bambu Studio", dimensions and triangle count, ZIP download of a folder, favourites, PWA icon, OIDC | — |
 
 ### Risks to check early (spikes in M1)
 

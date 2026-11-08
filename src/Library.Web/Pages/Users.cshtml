@@ -1,0 +1,115 @@
+@page "/users"
+@model UsersModel
+
+<main class="content users-page">
+    <h1>Users</h1>
+
+    @if (Model.Me is null)
+    {
+        <p>Only admins can manage users. Log in with an admin account to see this page.</p>
+    }
+    else
+    {
+        <p class="muted lead">Everyone who can open the library from outside the home network. On the home network itself nobody needs an account.</p>
+
+        @if (Model.Message is not null)
+        {
+            <p class="notice" role="status">@Model.Message</p>
+        }
+        @if (Model.Error is not null)
+        {
+            <p class="notice notice--error" role="alert">@Model.Error</p>
+        }
+
+        <ul class="user-list">
+            @foreach (var account in Model.Accounts)
+            {
+                var isMe = account.Id == Model.Me.Id;
+                <li class="user-row">
+                    <div class="user-main">
+                        <strong>@account.UserName</strong>
+                        @if (account.IsAdmin)
+                        {
+                            <span class="pill">admin</span>
+                        }
+                        @if (isMe)
+                        {
+                            <span class="pill pill--muted">you</span>
+                        }
+                        @if (account.MustChangePassword)
+                        {
+                            <span class="pill pill--warn" title="Logged in with a password set by an admin; must choose their own">must change password</span>
+                        }
+                        <span class="muted user-dates">
+                            Added @Display.Date(account.Created) ·
+                            @(account.LastLogin is { } last ? $"last login {Display.Ago(last)}" : "never logged in")
+                        </span>
+                    </div>
+
+                    @if (isMe)
+                    {
+                        <div class="user-actions">
+                            <a href="/account" class="button small">Change my password</a>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="user-actions">
+                            <details class="reset">
+                                <summary class="button small">Reset password</summary>
+                                <form method="post" asp-page-handler="Reset" class="reset-form">
+                                    <input type="hidden" name="id" value="@account.Id">
+                                    <input type="password" name="password" placeholder="New password" autocomplete="new-password"
+                                           minlength="@UserStore.MinimumPasswordLength" required aria-label="New password for @account.UserName">
+                                    <input type="password" name="repeatPassword" placeholder="Again" autocomplete="new-password"
+                                           minlength="@UserStore.MinimumPasswordLength" required aria-label="New password again">
+                                    <button type="submit" class="button small primary">Set</button>
+                                    <label class="check">
+                                        <input type="checkbox" name="mustChangePassword" value="true" checked>
+                                        <span>Must choose a new password at next login</span>
+                                    </label>
+                                </form>
+                            </details>
+                            <form method="post" asp-page-handler="Admin">
+                                <input type="hidden" name="id" value="@account.Id">
+                                <input type="hidden" name="admin" value="@(account.IsAdmin ? "false" : "true")">
+                                <button type="submit" class="button small">@(account.IsAdmin ? "Remove admin" : "Make admin")</button>
+                            </form>
+                            <form method="post" asp-page-handler="Delete" data-confirm="Delete @account.UserName? They can no longer log in.">
+                                <input type="hidden" name="id" value="@account.Id">
+                                <button type="submit" class="button small danger">Delete</button>
+                            </form>
+                        </div>
+                    }
+                </li>
+            }
+        </ul>
+
+        <section>
+            <h2 class="section-title">Add a user</h2>
+            <form method="post" asp-page-handler="Add" class="login-card add-user">
+                <label>
+                    <span>User name</span>
+                    <input name="userName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" required>
+                </label>
+                <label>
+                    <span>Starting password <small class="muted">(at least @UserStore.MinimumPasswordLength characters)</small></span>
+                    <input name="password" type="password" autocomplete="new-password" minlength="@UserStore.MinimumPasswordLength" required>
+                </label>
+                <label>
+                    <span>Password again</span>
+                    <input name="repeatPassword" type="password" autocomplete="new-password" minlength="@UserStore.MinimumPasswordLength" required>
+                </label>
+                <label class="remember">
+                    <input type="checkbox" name="mustChangePassword" value="true" checked>
+                    <span>Must choose a new password at first login</span>
+                </label>
+                <label class="remember">
+                    <input type="checkbox" name="isAdmin" value="true">
+                    <span>Admin (can manage users)</span>
+                </label>
+                <button type="submit" class="button primary">Add user</button>
+            </form>
+        </section>
+    }
+</main>

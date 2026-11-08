@@ -9,21 +9,20 @@ namespace Library.Web.Auth;
 public static class Session
 {
     private const string StampClaim = "library:stamp";
-    private const string AdminRole = "admin";
+    private const string UserKey = "library.user";
+
+    // While a password change is required, only these paths are reachable (plus nothing else).
+    private static readonly string[] OpenWhileChangeRequired = ["/account", "/logout", "/health", "/css/", "/js/", "/lib/", "/favicon.svg"];
 
     public static Task SignInAsync(HttpContext context, AppUser user, bool persistent)
     {
+        // Admin rights aren't in the cookie: pages check the database, so changes apply at once.
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString(CultureInfo.InvariantCulture)),
             new(ClaimTypes.Name, user.UserName),
             new(StampClaim, user.SecurityStamp),
         };
-        if (user.IsAdmin)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, AdminRole));
-        }
-
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
         return context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal,
             new AuthenticationProperties { IsPersistent = persistent, AllowRefresh = true });
@@ -41,6 +40,30 @@ public static class Session
         {
             context.RejectPrincipal();
             await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return;
         }
+
+        context.HttpContext.Items[UserKey] = user;
+    }
+
+    /// <summary>The logged-in account as loaded for this request; null for home-network and anonymous visitors.</summary>
+    public static AppUser? CurrentUser(HttpContext context) => context.Items[UserKey] as AppUser;
+
+    /// <summary>
+    /// Middleware: someone with a starting or reset password is sent to the Account page until they've chosen their
+    /// own. Pages, previews, downloads and meshes all wait.
+    /// </summary>
+    public static async Task RequirePasswordChange(HttpContext context, Func<Task> next)
+    {
+        var path = context.Request.Path.Value ?? "/";
+        if (CurrentUser(context) is { MustChangePassword: true } &&
+            !OpenWhileChangeRequired.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase) ||
+                                              (p.EndsWith('/') && path.StartsWith(p, StringComparison.OrdinalIgnoreCase))))
+        {
+            context.Response.Redirect("/account");
+            return;
+        }
+
+        await next();
     }
 }

@@ -123,6 +123,7 @@ app.Use(async (context, next) =>
     TrustedNetwork.SignInIfTrusted(context, options);
     await next();
 });
+app.Use(Session.RequirePasswordChange);
 app.UseAuthorization();
 
 // The login page needs its CSS before anyone is logged in.

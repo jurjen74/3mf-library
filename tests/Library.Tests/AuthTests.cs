@@ -237,7 +237,7 @@ public sealed partial class AuthTests : IDisposable
     public async Task Changing_the_password_logs_out_other_devices()
     {
         var (phone, users) = Site();
-        var laptop = NewClient(_factories.OfType<WebApplicationFactory<Program>>().Last()); // same site, own cookies
+        var laptop = NewClient(LastFactory); // same site, own cookies
         await LogIn(phone, "jurjen", Password);
         await LogIn(laptop, "jurjen", Password);
 
@@ -273,6 +273,191 @@ public sealed partial class AuthTests : IDisposable
     }
 
     [Fact]
+    public async Task Only_admins_can_open_the_users_page()
+    {
+        var (admin, users) = Site();
+        users.Create("guest", "guest password 123", isAdmin: false);
+        var guest = NewClient(LastFactory);
+        var home = NewClient(LastFactory);
+        await LogIn(admin, "jurjen", Password);
+        await LogIn(guest, "guest", "guest password 123");
+
+        var adminPage = await Send(admin, "/users", Outside);
+        var browse = await (await Send(admin, "/browse", Outside)).Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, adminPage.StatusCode);
+        Assert.Contains("href=\"/users\"", browse);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(guest, "/users", Outside)).StatusCode);
+        Assert.DoesNotContain("href=\"/users\"", await (await Send(guest, "/browse", Outside)).Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(home, "/users", Lan)).StatusCode);
+    }
+
+    [Fact]
+    public async Task An_admin_adds_a_user_who_can_then_log_in()
+    {
+        var (admin, users) = Site();
+        await LogIn(admin, "jurjen", Password);
+
+        await UsersAction(admin, "Add", [new("userName", "Guest"), new("password", "guest password 123"), new("repeatPassword", "guest password 123")]);
+        var duplicate = await UsersAction(admin, "Add", [new("userName", "GUEST"), new("password", "another password"), new("repeatPassword", "another password")]);
+
+        var guest = NewClient(LastFactory);
+        Assert.Equal("/browse", (await LogIn(guest, "guest", "guest password 123")).Headers.Location?.OriginalString);
+        Assert.False(users.Verify("guest", "guest password 123")!.IsAdmin);
+        Assert.Contains("already a user called GUEST", WebUtility.HtmlDecode(duplicate));
+        Assert.Single(users.List(), u => u.UserName == "Guest");
+    }
+
+    [Fact]
+    public async Task Resetting_or_deleting_a_user_ends_their_sessions()
+    {
+        var (admin, users) = Site();
+        var guestId = users.Create("guest", "guest password 123", isAdmin: false)!.Id;
+        users.Create("other", "other password 123", isAdmin: false);
+        var guest = NewClient(LastFactory);
+        var other = NewClient(LastFactory);
+        await LogIn(admin, "jurjen", Password);
+        await LogIn(guest, "guest", "guest password 123");
+        await LogIn(other, "other", "other password 123");
+
+        var reset = await UsersAction(admin, "Reset", [new("id", guestId.ToString()), new("password", "a new guest password"), new("repeatPassword", "a new guest password")]);
+        await UsersAction(admin, "Delete", [new("id", users.List().Single(u => u.UserName == "other").Id.ToString())]);
+
+        Assert.Contains("New password set for guest", reset);
+        Assert.Equal(HttpStatusCode.Redirect, (await Send(guest, "/browse", Outside)).StatusCode);
+        Assert.NotNull(users.Verify("guest", "a new guest password"));
+        Assert.Equal(HttpStatusCode.Redirect, (await Send(other, "/browse", Outside)).StatusCode);
+        Assert.Null(users.Verify("other", "other password 123"));
+        Assert.Equal(HttpStatusCode.OK, (await Send(admin, "/browse", Outside)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Admins_cannot_delete_themselves_or_remove_the_last_admin()
+    {
+        var (admin, users) = Site();
+        var myId = users.List().Single().Id.ToString();
+        await LogIn(admin, "jurjen", Password);
+
+        var deleteSelf = await UsersAction(admin, "Delete", [new("id", myId)]);
+        var demoteSelf = await UsersAction(admin, "Admin", [new("id", myId), new("admin", "false")]);
+
+        Assert.Contains("can't delete your own account", WebUtility.HtmlDecode(deleteSelf));
+        Assert.Contains("at least one admin", demoteSelf);
+        Assert.True(users.List().Single().IsAdmin);
+    }
+
+    [Fact]
+    public async Task Admin_rights_can_be_handed_over()
+    {
+        var (admin, users) = Site();
+        var guestId = users.Create("guest", "guest password 123", isAdmin: false)!.Id.ToString();
+        var myId = users.List().Single(u => u.UserName == "jurjen").Id.ToString();
+        await LogIn(admin, "jurjen", Password);
+
+        await UsersAction(admin, "Admin", [new("id", guestId), new("admin", "true")]);
+        var demote = await Post(admin, "/users?handler=Admin", Outside,
+            [new("id", myId), new("admin", "false"), new("__RequestVerificationToken", Token(await (await Send(admin, "/users", Outside)).Content.ReadAsStringAsync()))]);
+
+        Assert.Equal("/browse", demote.Headers.Location?.OriginalString);
+        Assert.True(users.Verify("guest", "guest password 123")!.IsAdmin);
+        Assert.False(users.Verify("jurjen", Password)!.IsAdmin);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(admin, "/users", Outside)).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_new_user_with_a_starting_password_must_choose_their_own_first()
+    {
+        var (admin, users) = Site();
+        await LogIn(admin, "jurjen", Password);
+        await UsersAction(admin, "Add",
+            [new("userName", "guest"), new("password", "starting password"), new("repeatPassword", "starting password"), new("mustChangePassword", "true")]);
+        var guest = NewClient(LastFactory);
+
+        await LogIn(guest, "guest", "starting password");
+
+        foreach (var url in new[] { "/browse", "/search?q=x", "/download/Lamp.3mf", "/img/0123456789abcdef/plate_1.png", "/users" })
+        {
+            var blocked = await Send(guest, url, Outside);
+            Assert.Equal(HttpStatusCode.Redirect, blocked.StatusCode);
+            Assert.Equal("/account", blocked.Headers.Location?.OriginalString);
+        }
+
+        var page = await (await Send(guest, "/account", Outside)).Content.ReadAsStringAsync();
+        Assert.Contains("Choose your own password", page);
+        Assert.DoesNotContain("Search models", page);
+
+        var same = await ChangePassword(guest, "starting password", "starting password");
+        Assert.Contains("different from the one you have now", WebUtility.HtmlDecode(await same.Content.ReadAsStringAsync()));
+
+        var changed = await ChangePassword(guest, "starting password", "my own password 42");
+        Assert.Equal("/browse", changed.Headers.Location?.OriginalString);
+        Assert.Equal(HttpStatusCode.OK, (await Send(guest, "/browse", Outside)).StatusCode);
+        Assert.False(users.Verify("guest", "my own password 42")!.MustChangePassword);
+    }
+
+    [Fact]
+    public async Task Without_the_checkbox_a_new_user_can_start_straight_away()
+    {
+        var (admin, users) = Site();
+        await LogIn(admin, "jurjen", Password);
+        await UsersAction(admin, "Add", [new("userName", "guest"), new("password", "starting password"), new("repeatPassword", "starting password")]);
+        var guest = NewClient(LastFactory);
+
+        await LogIn(guest, "guest", "starting password");
+
+        Assert.Equal(HttpStatusCode.OK, (await Send(guest, "/browse", Outside)).StatusCode);
+        Assert.False(users.List().Single(u => u.UserName == "guest").MustChangePassword);
+    }
+
+    [Fact]
+    public async Task A_reset_password_can_require_a_new_choice_and_logging_out_still_works()
+    {
+        var (admin, users) = Site();
+        var guestId = users.Create("guest", "guest password 123", isAdmin: false)!.Id;
+        await LogIn(admin, "jurjen", Password);
+
+        var list = await UsersAction(admin, "Reset",
+            [new("id", guestId.ToString()), new("password", "temporary password"), new("repeatPassword", "temporary password"), new("mustChangePassword", "true")]);
+        var guest = NewClient(LastFactory);
+        await LogIn(guest, "guest", "temporary password");
+
+        Assert.Contains("must change password", list);
+        Assert.Equal("/account", (await Send(guest, "/browse", Outside)).Headers.Location?.OriginalString);
+        var page = await (await Send(guest, "/account", Outside)).Content.ReadAsStringAsync();
+        var logout = await Post(guest, "/logout", Outside, [new("__RequestVerificationToken", Token(page))]);
+        Assert.Equal("/login", logout.Headers.Location?.OriginalString);
+    }
+
+    [Fact]
+    public void Upgrading_an_existing_users_db_keeps_accounts_and_forces_nothing()
+    {
+        var dataPath = Path.Combine(_root, "upgrade");
+        Directory.CreateDirectory(dataPath);
+        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(dataPath, "users.db")}"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = $"""
+                CREATE TABLE users (id INTEGER PRIMARY KEY, user_name TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL,
+                    is_admin INTEGER NOT NULL DEFAULT 0, security_stamp TEXT NOT NULL, created_at INTEGER NOT NULL, last_login_at INTEGER);
+                INSERT INTO users (user_name, password_hash, is_admin, security_stamp, created_at)
+                VALUES ('jurjen', '{new Microsoft.AspNetCore.Identity.PasswordHasher<AppUser>().HashPassword(new AppUser(), Password)}', 1, 'stamp', 0);
+                PRAGMA user_version = 1;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        var users = new UserStore(new LibraryOptions { LibraryPath = _root, DataPath = dataPath });
+        users.Migrate();
+        users.Migrate();
+
+        var user = users.Verify("jurjen", Password);
+        Assert.NotNull(user);
+        Assert.True(user.IsAdmin);
+        Assert.False(user.MustChangePassword);
+    }
+
+    [Fact]
     public void User_store_keeps_names_unique_and_the_first_admin_single()
     {
         var users = new UserStore(new LibraryOptions { LibraryPath = _root, DataPath = _root });
@@ -280,9 +465,9 @@ public sealed partial class AuthTests : IDisposable
 
         Assert.NotNull(users.CreateFirstAdmin("jurjen", Password));
         Assert.Null(users.CreateFirstAdmin("someone", Password));
-        Assert.ThrowsAny<Exception>(() => users.Create("JURJEN", Password, isAdmin: false));
+        Assert.Null(users.Create("JURJEN", Password, isAdmin: false));
 
-        var second = users.Create("guest", "another long password", isAdmin: false);
+        var second = users.Create("guest", "another long password", isAdmin: false)!;
         Assert.False(second.IsAdmin);
         Assert.Equal(second.Id, users.Verify("GUEST", "another long password")?.Id);
         Assert.DoesNotContain(Password, second.PasswordHash);
@@ -319,6 +504,24 @@ public sealed partial class AuthTests : IDisposable
         }
 
         return (client, users);
+    }
+
+    private WebApplicationFactory<Program> LastFactory => _factories.OfType<WebApplicationFactory<Program>>().Last();
+
+    /// <summary>Runs a Users page action as the logged-in client and returns the page it lands on.</summary>
+    private static async Task<string> UsersAction(HttpClient client, string handler, KeyValuePair<string, string>[] form)
+    {
+        var token = Token(await (await Send(client, "/users", Outside)).Content.ReadAsStringAsync());
+        var response = await Post(client, $"/users?handler={handler}", Outside, [.. form, new("__RequestVerificationToken", token)]);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        return await (await Send(client, "/users", Outside)).Content.ReadAsStringAsync();
+    }
+
+    private static async Task<HttpResponseMessage> ChangePassword(HttpClient client, string current, string next)
+    {
+        var token = Token(await (await Send(client, "/account", Outside)).Content.ReadAsStringAsync());
+        return await Post(client, "/account", Outside,
+            [new("CurrentPassword", current), new("NewPassword", next), new("RepeatPassword", next), new("__RequestVerificationToken", token)]);
     }
 
     private static HttpClient NewClient(WebApplicationFactory<Program> factory) =>

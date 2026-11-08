@@ -10,6 +10,7 @@
     var status = Indexer.Status;
     var returnPath = ViewData["FolderPath"] as string ?? "";
     var homeNetwork = TrustedNetwork.IsHomeNetworkUser(User);
+    var isAdmin = stats is not null && Session.UserId(User) is { } userId && Users.FindById(userId) is { IsAdmin: true };
     var offerSetup = stats is not null && homeNetwork && !Users.HasUsers();
 }
 <!DOCTYPE html>
@@ -44,6 +45,10 @@
                 }
                 else
                 {
+                    @if (isAdmin)
+                    {
+                        <a href="/users">Users</a>
+                    }
                     <a href="/account" title="Your account">@User.Identity?.Name</a>
                     <form method="post" action="/logout" class="logout-form">
                         @Html.AntiForgeryToken()

@@ -17,6 +17,12 @@
     setTimeout(() => window.location.reload(), seconds * 1000);
   }
 
+  // Forms that do something irreversible ask first.
+  document.addEventListener("submit", (event) => {
+    const message = event.target instanceof HTMLFormElement ? event.target.dataset.confirm : null;
+    if (message && !window.confirm(message)) event.preventDefault();
+  });
+
   // "/" jumps to the search box.
   const search = document.querySelector(".topbar-search input");
   document.addEventListener("keydown", (event) => {

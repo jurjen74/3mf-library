@@ -781,3 +781,59 @@ a.card-thumb:hover img { transform: scale(1.03); }
 }
 .account-card { max-width: 420px; }
 .account-card h2 { font-size: 1.05rem; margin: 0; }
+
+/* Users page */
+.users-page .notice { margin: 0 0 1rem; max-width: 760px; }
+.notice--error { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+.user-list {
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+  max-width: 900px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.user-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding: 0.75rem 1rem;
+}
+.user-row + .user-row { border-top: 1px solid var(--border); }
+.user-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.5rem; min-width: 0; }
+.user-dates { flex-basis: 100%; font-size: 0.8rem; }
+.user-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.4rem; }
+.user-actions form { margin: 0; }
+.pill {
+  font-size: 0.7rem;
+  font-weight: 650;
+  padding: 0.08rem 0.45rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pill--muted { background: var(--surface-2); color: var(--muted); }
+.button.small { padding: 0.3rem 0.65rem; font-size: 0.8rem; border-radius: 7px; }
+.button.danger { color: var(--warn); }
+.button.danger:hover { border-color: var(--warn); }
+details.reset > summary { list-style: none; }
+details.reset > summary::-webkit-details-marker { display: none; }
+.reset-form { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; }
+.reset-form input[type="password"] {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  width: 11rem;
+}
+.add-user { max-width: 420px; }
+.pill--warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.reset-form .check { flex-basis: 100%; display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); }
+.forced-logout { margin-top: 0.75rem; text-align: center; }
+.login-page { flex-direction: column; align-items: center; }

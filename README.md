@@ -56,7 +56,11 @@ through a proxy always needs the login, even when it says it comes from the LAN.
 **First run:** open the site from the home network (`http://192.168.2.213:8085`) and create the first account on the
 page it shows (or via the "No account yet" banner). Only direct visitors from the home network can do this, never
 through the proxy. Accounts live in `data/users.db` with hashed passwords; change yours under the user name in the top
-bar (this logs out your other devices). Forgot it? Stop the container, delete `data/users.db`, and set up again.
+bar (this logs out your other devices). Admins manage everyone else under **Users** in the top bar: add people,
+reset a password (both can require the person to choose their own password at the next login, on by default),
+grant or remove admin, delete (resets and deletes end that person's sessions; the last admin
+always stays). Forgot your own password and no other admin? Stop the container, delete `data/users.db`, and set
+up again.
 
 **Proxy host in Nginx Proxy Manager:** forward `http://192.168.2.213:8085`, request a Let's Encrypt certificate
 with Force SSL, keep *Cache Assets* off, and set `KNOWN_PROXIES=<npm-ip>` in `/opt/3mf-library/.env` so the app sees
