@@ -474,8 +474,8 @@ volumes:
 | # | Deliverable | Done when |
 |---|---|---|
 | **M0 — Provision VM** (1 evening, in parallel with M1) | Synology NFS permission, Debian 13 VM on Proxmox, Docker, manual NFS test, Proxmox firewall, backup + snapshot (see Provisioning the VM) | All the checks at the end of the provisioning section pass |
-| **M1 — Browse** (1 weekend) | Project skeleton, Dockerfile, indexer for 3MF (metadata + plate PNGs), SQLite, Browse page with folder tree and card grid, Download | **Built 2026-11-08.** Verified on the Mac against the 98 locally synced files (17 3MFs, all with previews; 33 tests pass; amd64 image runs under Podman with a read-only mount). Still to check: the full 120-3MF library on VM 130 over NFS |
-| **M2 — Details & search** | Detail page (plates, photos, info, sanitised description, swatches, slice info), Search (FTS5), Recent, polling indexer with a stability check, attachments | A new file synced into OneDrive appears on the site within about 5 minutes, with its details |
+| **M1 — Browse** (1 weekend) | Project skeleton, Dockerfile, indexer for 3MF (metadata + plate PNGs), SQLite, Browse page with folder tree and card grid, Download | **Done 2026-11-08.** Running on VM 130 at `http://192.168.2.213:8085`: first NFS scan 3.3 s, 235 files in 57 folders, 0 errors; 119 of 120 3MFs have a preview (the Kintsu "(Geometry)" export has none embedded, so it waits for M3); 33 tests pass; library mount verified read-only, container runs as UID 1000 |
+| **M2 — Details & search** | Detail page (plates, photos, info, sanitised description, swatches, slice info), Search (FTS5), Recent, polling indexer with a stability check, attachments | **Built 2026-11-08.** File page with plate switcher (objects, print time and weight per plate when sliced), MakerWorld photo gallery with lightbox, sanitised description, previous/next in folder (← →); search over name, title, designer, folder, object names and description (FTS5, prefix match) plus folder matches; Recent page; 10 s settle check before reading new or changed files; orphaned-cache cleanup. Full library: 385 photos, 77 descriptions, 300 plates, 0 errors; 59 tests pass |
 | **M3 — STL & 3D** | CPU rasteriser for STL / image-less 3MF; plate→GLB export; three.js viewer tab | All 80 STLs have a preview; plates of the 87 MB TitanPals file open in the viewer at an acceptable speed |
 | **M4 — Login & deploy** | Login, trusted networks, admin page, hardening, GitHub Actions → GHCR (amd64), compose with the NFS volume deployed to the M0 VM, NPM proxy host | Running on Proxmox behind NPM at `models.ladenius.net`; from a phone on 4G it asks for a login and then works; an external request is never treated as LAN; the library mount is verified read-only |
 | M5 — Nice to have | Share links, "Open in Bambu Studio", dimensions and triangle count, ZIP download of a folder, favourites, PWA icon, OIDC | — |
@@ -501,9 +501,12 @@ volumes:
 ## Open questions
 
 - The NPM LXC's IP?
-- Cloud Sync direction: the deleted `datapackage.json` files are still
-  on the NAS, so OneDrive deletions don't (yet) reach `3dprinting`.
-  Is the sync task set to keep files that were deleted at the source?
+- **Cloud Sync doesn't pass deletions on** (confirmed 2026-11-08): the
+  NAS has every OneDrive file with identical sizes, plus the 48
+  `datapackage.json` files deleted from OneDrive the day before. Files
+  deleted or renamed in OneDrive will therefore stay on the NAS and keep
+  showing on the site. Check the Cloud Sync task (direction, and the
+  option that keeps files removed at the source).
 - Hostname for the NPM proxy host (`models.ladenius.net` is a
   placeholder)?
 

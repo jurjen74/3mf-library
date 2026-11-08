@@ -1,0 +1,7 @@
+@model IReadOnlyList<string>
+<span class="swatches">
+    @foreach (var colour in Model)
+    {
+        <svg width="14" height="14" viewBox="0 0 14 14" role="img" aria-label="@colour"><title>@colour</title><circle cx="7" cy="7" r="6" fill="@colour"/></svg>
+    }
+</span>

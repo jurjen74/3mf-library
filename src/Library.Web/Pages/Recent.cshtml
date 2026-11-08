@@ -1,0 +1,29 @@
+@page "/recent"
+@model RecentModel
+@using Library.Web.Pages.Shared
+
+<main class="content">
+    <h1>Recent</h1>
+    <p class="muted lead">The @RecentModel.Count most recently modified models, newest first.</p>
+
+    @if (Model.Models.Count == 0)
+    {
+        <p class="empty">No models indexed yet.</p>
+    }
+    else
+    {
+        var groups = Model.Models.GroupBy(f => Display.Date(f.Modified));
+        foreach (var group in groups)
+        {
+            <section>
+                <h2 class="section-title">@group.Key <span>@group.Count()</span></h2>
+                <div class="card-grid">
+                    @foreach (var file in group)
+                    {
+                        <partial name="_ModelCard" model="new ModelCard(file, ShowFolder: true)" />
+                    }
+                </div>
+            </section>
+        }
+    }
+</main>

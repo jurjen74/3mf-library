@@ -5,6 +5,8 @@ public sealed record IndexerStatus(bool Scanning, DateTimeOffset? LastFinished, 
 /// <summary>Scans at startup, then every <see cref="LibraryOptions.ScanInterval"/> or when asked to.</summary>
 public sealed class IndexerService(LibraryScanner scanner, LibraryOptions options, ILogger<IndexerService> log) : BackgroundService
 {
+    private static readonly TimeSpan RetrySoon = TimeSpan.FromSeconds(30);
+
     private readonly SemaphoreSlim _trigger = new(0, 1);
 
     public IndexerStatus Status { get; private set; } = new(false, null, null);
@@ -45,9 +47,13 @@ public sealed class IndexerService(LibraryScanner scanner, LibraryOptions option
                 Status = Status with { Scanning = false };
             }
 
+            // Files still being written get another look soon rather than at the next regular scan.
+            var wait = Status.LastResult is { Deferred: > 0 } && options.ScanInterval > RetrySoon
+                ? RetrySoon
+                : options.ScanInterval;
             try
             {
-                await _trigger.WaitAsync(options.ScanInterval, stoppingToken);
+                await _trigger.WaitAsync(wait, stoppingToken);
             }
             catch (OperationCanceledException)
             {

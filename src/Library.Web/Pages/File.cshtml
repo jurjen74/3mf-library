@@ -1,0 +1,198 @@
+@page "/file/{**path}"
+@model FileModel
+@{
+    var file = Model.Entry;
+    var title = Display.Title(file);
+    var selected = Model.SelectedPlate;
+    var stageImage = selected?.Image is not null && file.CacheKey is not null
+        ? Display.ImageUrl(file.CacheKey, selected.Image)
+        : file.CacheKey is not null && file.Cover is not null
+            ? Display.ImageUrl(file.CacheKey, file.Cover)
+            : file.Kind == FileKinds.Image ? Display.DownloadUrl(file.Path) : null;
+    var colours = file.ColourList;
+}
+
+<main class="content file-page">
+    <nav class="crumbs" aria-label="Breadcrumb">
+        @foreach (var crumb in Model.Crumbs)
+        {
+            <a href="@Display.BrowseUrl(crumb.Path)">@crumb.Name</a>
+            <span class="sep" aria-hidden="true">/</span>
+        }
+        <span aria-current="page">@file.Name</span>
+    </nav>
+
+    <header class="file-head">
+        <div class="file-title">
+            <h1>@title</h1>
+            @if (file.Title is not null)
+            {
+                <p class="file-name">@file.Name</p>
+            }
+        </div>
+        <div class="file-actions">
+            @if (Model.ModelsInFolder > 1)
+            {
+                <nav class="pager" aria-label="Models in this folder">
+                    @if (Model.Previous is { } previous)
+                    {
+                        <a class="icon-button" href="@Display.FileUrl(previous.Path)" rel="prev" title="Previous: @Display.Title(previous)" data-key="ArrowLeft">
+                            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            <span class="visually-hidden">Previous</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="icon-button disabled" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    }
+                    <span class="pager-count">@Model.PositionInFolder / @Model.ModelsInFolder</span>
+                    @if (Model.Next is { } next)
+                    {
+                        <a class="icon-button" href="@Display.FileUrl(next.Path)" rel="next" title="Next: @Display.Title(next)" data-key="ArrowRight">
+                            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            <span class="visually-hidden">Next</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="icon-button disabled" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    }
+                </nav>
+            }
+            <a class="button primary" href="@Display.DownloadUrl(file.Path)" download>
+                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4.5-4.5M12 14l-4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Download · @Display.Size(file.Size)
+            </a>
+        </div>
+    </header>
+
+    <div class="file-layout">
+        <div class="file-visual">
+            <figure class="stage">
+                @if (stageImage is not null)
+                {
+                    <img id="stage-image" src="@stageImage" alt="@(selected is null ? title : FileModel.PlateLabel(selected))" width="512" height="512">
+                }
+                else
+                {
+                    <div class="placeholder">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 3 7v10l9 5 9-5V7l-9-5Zm0 2.3L18.7 8 12 11.7 5.3 8 12 4.3ZM5 9.7l6 3.3v6.6l-6-3.3V9.7Zm8 9.9V13l6-3.3v6.6l-6 3.3Z" fill="currentColor"/></svg>
+                        <span>@(file.Error is not null ? "Could not read this file" : file.Kind == FileKinds.Stl ? "STL previews come later" : "No preview inside this file")</span>
+                    </div>
+                }
+                @if (selected is not null)
+                {
+                    <figcaption>
+                        <strong id="stage-label">@FileModel.PlateLabel(selected)</strong>
+                        <span id="stage-details" class="muted">@FileModel.PlateDetails(selected)</span>
+                    </figcaption>
+                }
+            </figure>
+
+            @if (Model.Plates.Count(p => p.Image is not null) > 1 && file.CacheKey is not null)
+            {
+                <ol class="plate-strip" aria-label="Plates">
+                    @foreach (var plate in Model.Plates.Where(p => p.Image is not null))
+                    {
+                        <li>
+                            <a href="?plate=@plate.Idx"
+                               class="plate-thumb"
+                               aria-current="@(plate.Idx == selected?.Idx ? "true" : null)"
+                               title="@FileModel.PlateLabel(plate)"
+                               data-src="@Display.ImageUrl(file.CacheKey, plate.Image!)"
+                               data-label="@FileModel.PlateLabel(plate)"
+                               data-details="@FileModel.PlateDetails(plate)"
+                               data-objects="@string.Join(", ", plate.ObjectList)">
+                                <img src="@Display.ImageUrl(file.CacheKey, plate.ImageSmall ?? plate.Image!)" alt="" loading="lazy" width="128" height="128">
+                                <span>@plate.Idx</span>
+                            </a>
+                        </li>
+                    }
+                </ol>
+            }
+
+            @if (selected is not null && selected.ObjectList.Count > 0)
+            {
+                <p class="plate-objects"><span class="muted">On this plate:</span> <span id="stage-objects">@string.Join(", ", selected.ObjectList)</span></p>
+            }
+        </div>
+
+        <aside class="facts" aria-label="Details">
+            <dl>
+                @if (file.Designer is not null)
+                {
+                    <dt>Designer</dt>
+                    <dd>@file.Designer</dd>
+                }
+                @if (file.License is not null)
+                {
+                    <dt>License</dt>
+                    <dd>@file.License</dd>
+                }
+                @if (Model.Plates.Count > 0)
+                {
+                    <dt>Plates</dt>
+                    <dd>@Model.Plates.Count</dd>
+                }
+                @if (Model.TotalPrintSeconds is { } seconds)
+                {
+                    <dt>Print time</dt>
+                    <dd>@Display.Duration(seconds) <span class="muted">(estimate when saved)</span></dd>
+                }
+                @if (Model.TotalWeightGrams is { } grams)
+                {
+                    <dt>Filament</dt>
+                    <dd>@Display.Grams(grams)</dd>
+                }
+                @if (colours.Count > 0)
+                {
+                    <dt>Colours</dt>
+                    <dd><partial name="_Swatches" model="colours" /></dd>
+                }
+                @if (file.Application is not null)
+                {
+                    <dt>Saved with</dt>
+                    <dd>@file.Application.Replace('-', ' ')</dd>
+                }
+                @if (file.Created is not null)
+                {
+                    <dt>Created</dt>
+                    <dd>@file.Created</dd>
+                }
+                <dt>Modified</dt>
+                <dd>@Display.Date(file.Modified)</dd>
+                <dt>Size</dt>
+                <dd>@Display.Size(file.Size)</dd>
+                <dt>Folder</dt>
+                <dd><a href="@Display.BrowseUrl(file.Folder)">@(file.Folder.Length == 0 ? "Library" : file.Folder)</a></dd>
+            </dl>
+            @if (file.Error is not null)
+            {
+                <p class="warn">Could not read this file: @file.Error</p>
+            }
+        </aside>
+    </div>
+
+    @if (Model.Photos.Count > 0 && file.CacheKey is not null)
+    {
+        <section>
+            <h2 class="section-title">Photos <span>@Model.Photos.Count</span></h2>
+            <div class="photo-grid">
+                @foreach (var photo in Model.Photos)
+                {
+                    <a href="@Display.ImageUrl(file.CacheKey, photo.Image)" data-lightbox="photos" target="_blank">
+                        <img src="@Display.ImageUrl(file.CacheKey, photo.Image)" alt="Photo @photo.Idx of @title" loading="lazy">
+                    </a>
+                }
+            </div>
+        </section>
+    }
+
+    @if (Model.DescriptionHtml is not null)
+    {
+        <section>
+            <h2 class="section-title">Description</h2>
+            <div class="prose">@Html.Raw(Model.DescriptionHtml)</div>
+        </section>
+    }
+</main>

@@ -23,10 +23,17 @@
             <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 3 7v10l9 5 9-5V7l-9-5Zm0 2.3L18.7 8 12 11.7 5.3 8 12 4.3ZM5 9.7l6 3.3v6.6l-6-3.3V9.7Zm8 9.9V13l6-3.3v6.6l-6 3.3Z" fill="currentColor"/></svg>
             <span>@Options.SiteTitle</span>
         </a>
-        <span class="topbar-stats">@Display.Plural(stats.ThreeMf, "3MF", "3MFs") · @Display.Plural(stats.Stl, "STL", "STLs")</span>
+        <form class="topbar-search" action="/search" method="get" role="search">
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input type="search" name="q" value="@(ViewData["Query"] as string)" placeholder="Search models" aria-label="Search the library" accesskey="k">
+        </form>
+        <nav class="topbar-nav">
+            <a href="/recent">Recent</a>
+            <span class="topbar-stats">@Display.Plural(stats.ThreeMf, "3MF", "3MFs") · @Display.Plural(stats.Stl, "STL", "STLs")</span>
+        </nav>
     </header>
 
-    <div class="shell">
+    <div class="shell @(ViewData["ShellClass"] as string)">
         @RenderBody()
     </div>
 

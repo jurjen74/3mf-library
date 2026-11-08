@@ -8,7 +8,17 @@ using System.Xml;
 namespace Library.Web.Indexing;
 
 /// <summary>One build plate of a 3MF project and the preview images the slicer stored for it.</summary>
-public sealed record PlateInfo(int Index, string? Name, string? ImageEntry, string? SmallImageEntry);
+public sealed record PlateInfo(int Index, string? Name, string? ImageEntry, string? SmallImageEntry)
+{
+    /// <summary>Names of the objects placed on this plate, in plate order, without duplicates.</summary>
+    public IReadOnlyList<string> Objects { get; init; } = [];
+
+    /// <summary>Estimated print time; only present when the project was sliced before it was saved.</summary>
+    public int? PrintSeconds { get; init; }
+
+    /// <summary>Estimated filament weight in grams; only present when the project was sliced before it was saved.</summary>
+    public double? WeightGrams { get; init; }
+}
 
 /// <summary>What the indexer needs from a 3MF file. Read from a handful of small entries; geometry is never unpacked.</summary>
 public sealed class ThreeMfInfo
@@ -16,7 +26,10 @@ public sealed class ThreeMfInfo
     public string? Title { get; set; }
     public string? Designer { get; set; }
     public string? License { get; set; }
+
+    /// <summary>The description as HTML, unescaped but not yet sanitised.</summary>
     public string? Description { get; set; }
+
     public string? Application { get; set; }
     public string? CreationDate { get; set; }
     public List<PlateInfo> Plates { get; } = [];
@@ -25,6 +38,9 @@ public sealed class ThreeMfInfo
     public string? FallbackCoverEntry { get; set; }
 
     public List<string> FilamentColours { get; } = [];
+
+    /// <summary>Photos of the printed model that MakerWorld downloads embed, cover first.</summary>
+    public List<string> PhotoEntries { get; } = [];
 }
 
 /// <summary>
@@ -37,6 +53,8 @@ public static partial class ThreeMfReader
     private const long MaxConfigBytes = 32L * 1024 * 1024;
     private const int MaxMetadataChars = 256 * 1024;
     private const int MaxColours = 16;
+    private const int MaxPhotos = 40;
+    private const int MaxObjectsPerPlate = 100;
 
     private static readonly string[] FallbackCovers =
     [
@@ -44,6 +62,9 @@ public static partial class ThreeMfReader
         "Auxiliaries/.thumbnails/thumbnail_middle.png",
         "Auxiliaries/.thumbnails/thumbnail_3mf.png",
     ];
+
+    private static readonly StringComparer NaturalOrder =
+        StringComparer.Create(CultureInfo.InvariantCulture, CompareOptions.IgnoreCase | CompareOptions.NumericOrdering);
 
     public static ThreeMfInfo Read(ZipArchive zip)
     {
@@ -67,8 +88,8 @@ public static partial class ThreeMfReader
             ReadModelMetadata(model, info);
         }
 
-        // Plates come from the slicer's plate list (names, thumbnail paths) plus any plate_N.png not listed there.
-        var plates = new SortedDictionary<int, (string? Name, string? Image)>();
+        // Plates come from the slicer's plate list (names, thumbnails, objects) plus any plate_N.png not listed there.
+        var plates = new SortedDictionary<int, PlateSettings>();
         if (entries.TryGetValue("Metadata/model_settings.config", out var settings))
         {
             ReadPlateSettings(settings, plates);
@@ -79,11 +100,19 @@ public static partial class ThreeMfReader
             var match = PlateImagePattern().Match(name);
             if (match.Success && int.TryParse(match.Groups[1].Value, CultureInfo.InvariantCulture, out var index))
             {
-                if (!plates.TryGetValue(index, out var plate) || plate.Image is null)
+                if (!plates.TryGetValue(index, out var plate))
                 {
-                    plates[index] = (plate.Name, name);
+                    plates[index] = plate = new PlateSettings();
                 }
+
+                plate.Image ??= name;
             }
+        }
+
+        var sliced = new Dictionary<int, (int? Seconds, double? Grams)>();
+        if (entries.TryGetValue("Metadata/slice_info.config", out var sliceInfo))
+        {
+            ReadSliceInfo(sliceInfo, sliced);
         }
 
         foreach (var (index, plate) in plates)
@@ -93,7 +122,13 @@ public static partial class ThreeMfReader
                 : Find(entries, $"Metadata/plate_{index}.png");
             var small = Find(entries, $"Metadata/plate_{index}_small.png");
             var name = string.IsNullOrWhiteSpace(plate.Name) ? null : plate.Name.Trim();
-            info.Plates.Add(new PlateInfo(index, name, image, small));
+            sliced.TryGetValue(index, out var estimate);
+            info.Plates.Add(new PlateInfo(index, name, image, small)
+            {
+                Objects = plate.Objects,
+                PrintSeconds = estimate.Seconds,
+                WeightGrams = estimate.Grams,
+            });
         }
 
         info.FallbackCoverEntry = FallbackCovers.Select(c => Find(entries, c)).FirstOrDefault(c => c is not null);
@@ -103,8 +138,25 @@ public static partial class ThreeMfReader
             ReadFilamentColours(project, info.FilamentColours);
         }
 
+        info.PhotoEntries.AddRange(entries.Values
+            .Where(e => e.FullName.StartsWith("Auxiliaries/Model Pictures/", StringComparison.OrdinalIgnoreCase) &&
+                        PhotoExtension(e.FullName) is not null)
+            .Select(e => e.FullName)
+            .OrderBy(n => Path.GetFileNameWithoutExtension(n).Equals("cover", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(n => n, NaturalOrder)
+            .Take(MaxPhotos));
+
         return info;
     }
+
+    /// <summary>The cache file extension for a photo entry, or null when it isn't a web image.</summary>
+    public static string? PhotoExtension(string entryName) => Path.GetExtension(entryName).ToLowerInvariant() switch
+    {
+        ".webp" => "webp",
+        ".jpg" or ".jpeg" => "jpg",
+        ".png" => "png",
+        _ => null,
+    };
 
     /// <summary>Copies one entry to disk, refusing entries that claim or turn out to be larger than <paramref name="maxBytes"/>.</summary>
     public static void CopyEntry(ZipArchiveEntry entry, string destination, long maxBytes)
@@ -199,8 +251,7 @@ public static partial class ThreeMfReader
                 info.License ??= value;
                 break;
             case "description":
-                // Bambu Studio escapes the description HTML twice; XML parsing undoes one level.
-                info.Description ??= value.Contains("&lt;", StringComparison.Ordinal) ? WebUtility.HtmlDecode(value) : value;
+                info.Description ??= UnescapeDescription(value);
                 break;
             case "application":
                 info.Application ??= value;
@@ -211,7 +262,23 @@ public static partial class ThreeMfReader
         }
     }
 
-    private static void ReadPlateSettings(ZipArchiveEntry entry, SortedDictionary<int, (string? Name, string? Image)> plates)
+    /// <summary>
+    /// Bambu Studio escapes the description HTML twice, and attribute quotes once more (<c>class=&amp;#34;x&amp;#34;</c>).
+    /// XML parsing undoes one level; this undoes the rest.
+    /// </summary>
+    private static string UnescapeDescription(string value)
+    {
+        if (!value.Contains("&lt;", StringComparison.Ordinal))
+        {
+            return value;
+        }
+
+        return WebUtility.HtmlDecode(value)
+            .Replace("&#34;", "\"", StringComparison.Ordinal)
+            .Replace("&#39;", "'", StringComparison.Ordinal);
+    }
+
+    private static void ReadPlateSettings(ZipArchiveEntry entry, SortedDictionary<int, PlateSettings> plates)
     {
         if (entry.Length > MaxConfigBytes)
         {
@@ -221,40 +288,118 @@ public static partial class ThreeMfReader
         using var stream = entry.Open();
         using var reader = CreateXmlReader(stream);
 
-        int? id = null;
-        string? name = null;
-        string? image = null;
-        var inPlate = false;
+        // <config><object id="8"><metadata key="name" value="tray.stl"/>…</object>…
+        //         <plate><metadata key="plater_id" value="1"/>…<model_instance><metadata key="object_id" value="8"/>
+        var objectNames = new Dictionary<string, string>(StringComparer.Ordinal);
+        var plateObjectIds = new Dictionary<int, List<string>>();
+        string? objectId = null;
+        PlateSettings? plate = null;
+        int? plateId = null;
+        var objectIds = new List<string>();
 
         while (reader.Read())
         {
-            if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "plate" && reader.Depth == 1)
+            if (reader.NodeType == XmlNodeType.Element && reader.Depth == 1)
             {
-                inPlate = !reader.IsEmptyElement;
-                (id, name, image) = (null, null, null);
+                objectId = reader.LocalName == "object" ? reader.GetAttribute("id") : null;
+                if (reader.LocalName == "plate" && !reader.IsEmptyElement)
+                {
+                    plate = new PlateSettings();
+                    plateId = null;
+                    objectIds = [];
+                }
             }
-            else if (inPlate && reader.NodeType == XmlNodeType.Element && reader.LocalName == "metadata" && reader.Depth == 2)
+            else if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "metadata")
+            {
+                var key = reader.GetAttribute("key");
+                var value = reader.GetAttribute("value");
+                if (objectId is not null && reader.Depth == 2 && key == "name" && value is { Length: > 0 })
+                {
+                    objectNames.TryAdd(objectId, value);
+                }
+                else if (plate is not null && reader.Depth == 2)
+                {
+                    switch (key)
+                    {
+                        case "plater_id" when int.TryParse(value, CultureInfo.InvariantCulture, out var parsed):
+                            plateId = parsed;
+                            break;
+                        case "plater_name":
+                            plate.Name = value;
+                            break;
+                        case "thumbnail_file":
+                            plate.Image = value;
+                            break;
+                    }
+                }
+                else if (plate is not null && reader.Depth == 3 && key == "object_id" && value is not null)
+                {
+                    objectIds.Add(value);
+                }
+            }
+            else if (reader.NodeType == XmlNodeType.EndElement && reader.Depth == 1 && reader.LocalName == "plate" && plate is not null)
+            {
+                if (plateId is > 0 and < 1000)
+                {
+                    plates[plateId.Value] = plate;
+                    plateObjectIds[plateId.Value] = objectIds;
+                }
+
+                plate = null;
+            }
+        }
+
+        foreach (var (id, ids) in plateObjectIds)
+        {
+            plates[id].Objects = ids
+                .Select(i => objectNames.GetValueOrDefault(i))
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal)
+                .Take(MaxObjectsPerPlate)
+                .ToList();
+        }
+    }
+
+    private static void ReadSliceInfo(ZipArchiveEntry entry, Dictionary<int, (int? Seconds, double? Grams)> plates)
+    {
+        if (entry.Length > MaxConfigBytes)
+        {
+            return;
+        }
+
+        using var stream = entry.Open();
+        using var reader = CreateXmlReader(stream);
+
+        int? index = null;
+        int? seconds = null;
+        double? grams = null;
+        while (reader.Read())
+        {
+            if (reader.NodeType == XmlNodeType.Element && reader.Depth == 1 && reader.LocalName == "plate" && !reader.IsEmptyElement)
+            {
+                (index, seconds, grams) = (null, null, null);
+            }
+            else if (reader.NodeType == XmlNodeType.Element && reader.Depth == 2 && reader.LocalName == "metadata")
             {
                 var value = reader.GetAttribute("value");
                 switch (reader.GetAttribute("key"))
                 {
-                    case "plater_id" when int.TryParse(value, CultureInfo.InvariantCulture, out var parsed):
-                        id = parsed;
+                    case "index" when int.TryParse(value, CultureInfo.InvariantCulture, out var i):
+                        index = i;
                         break;
-                    case "plater_name":
-                        name = value;
+                    case "prediction" when int.TryParse(value, CultureInfo.InvariantCulture, out var s) && s > 0:
+                        seconds = s;
                         break;
-                    case "thumbnail_file":
-                        image = value;
+                    case "weight" when double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var g) && g > 0:
+                        grams = g;
                         break;
                 }
             }
-            else if (inPlate && reader.NodeType == XmlNodeType.EndElement && reader.LocalName == "plate" && reader.Depth == 1)
+            else if (reader.NodeType == XmlNodeType.EndElement && reader.Depth == 1 && reader.LocalName == "plate")
             {
-                inPlate = false;
-                if (id is > 0 and < 1000)
+                if (index is not null && (seconds is not null || grams is not null))
                 {
-                    plates[id.Value] = (name, image);
+                    plates[index.Value] = (seconds, grams);
                 }
             }
         }
@@ -292,6 +437,13 @@ public static partial class ThreeMfReader
                 }
             }
         }
+    }
+
+    private sealed class PlateSettings
+    {
+        public string? Name { get; set; }
+        public string? Image { get; set; }
+        public IReadOnlyList<string> Objects { get; set; } = [];
     }
 
     [GeneratedRegex(@"^Metadata/plate_(\d{1,3})\.png$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

@@ -4,13 +4,22 @@ using Microsoft.Data.Sqlite;
 namespace Library.Web.Data;
 
 /// <summary>
-/// The SQLite index in <c>/data/library.db</c>. It is a cache of what is on disk: deleting it only costs a rescan.
+/// The SQLite index in <c>/data/library.db</c>. It is a cache of what is on disk: deleting it only costs a rescan,
+/// so schema changes simply drop and recreate everything.
 /// </summary>
 public sealed class LibraryDb
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 3;
 
-    private const string SchemaV1 = """
+    private const string DropAll = """
+        DROP TABLE IF EXISTS files_fts;
+        DROP TABLE IF EXISTS photos;
+        DROP TABLE IF EXISTS plates;
+        DROP TABLE IF EXISTS files;
+        DROP TABLE IF EXISTS folders;
+        """;
+
+    private const string Schema = """
         CREATE TABLE folders (
             path   TEXT PRIMARY KEY,
             parent TEXT,
@@ -34,6 +43,7 @@ public sealed class LibraryDb
             application     TEXT,
             created         TEXT,
             plate_count     INTEGER NOT NULL DEFAULT 0,
+            photo_count     INTEGER NOT NULL DEFAULT 0,
             colours         TEXT,
             cover           TEXT,
             cover_small     TEXT,
@@ -42,14 +52,31 @@ public sealed class LibraryDb
         );
 
         CREATE INDEX ix_files_folder ON files (folder);
+        CREATE INDEX ix_files_mtime ON files (mtime);
 
         CREATE TABLE plates (
-            file_id     INTEGER NOT NULL REFERENCES files (id) ON DELETE CASCADE,
-            idx         INTEGER NOT NULL,
-            name        TEXT,
-            image       TEXT,
-            image_small TEXT,
+            file_id       INTEGER NOT NULL REFERENCES files (id) ON DELETE CASCADE,
+            idx           INTEGER NOT NULL,
+            name          TEXT,
+            image         TEXT,
+            image_small   TEXT,
+            objects       TEXT,
+            print_seconds INTEGER,
+            weight_grams  REAL,
             PRIMARY KEY (file_id, idx)
+        );
+
+        CREATE TABLE photos (
+            file_id INTEGER NOT NULL REFERENCES files (id) ON DELETE CASCADE,
+            idx     INTEGER NOT NULL,
+            image   TEXT NOT NULL,
+            PRIMARY KEY (file_id, idx)
+        );
+
+        -- Full-text search; rowid = files.id. Kept in step by the scanner.
+        CREATE VIRTUAL TABLE files_fts USING fts5 (
+            name, title, designer, folder, objects, description,
+            tokenize = 'unicode61 remove_diacritics 2'
         );
         """;
 
@@ -77,13 +104,14 @@ public sealed class LibraryDb
         using var connection = Open();
         connection.Execute("PRAGMA journal_mode = WAL;");
         var version = connection.ExecuteScalar<long>("PRAGMA user_version;");
-        if (version >= SchemaVersion)
+        if (version == SchemaVersion)
         {
             return;
         }
 
         using var transaction = connection.BeginTransaction();
-        connection.Execute(SchemaV1, transaction: transaction);
+        connection.Execute(DropAll, transaction: transaction);
+        connection.Execute(Schema, transaction: transaction);
         connection.Execute($"PRAGMA user_version = {SchemaVersion};", transaction: transaction);
         transaction.Commit();
     }

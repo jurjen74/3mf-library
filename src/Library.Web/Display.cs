@@ -14,6 +14,23 @@ public static class Display
 
     public static string DownloadUrl(string path) => "/download/" + EscapePath(path);
 
+    public static string FileUrl(string path) => "/file/" + EscapePath(path);
+
+    /// <summary>"35 min", "2 h 05 min".</summary>
+    public static string Duration(long seconds)
+    {
+        var minutes = (int)Math.Round(seconds / 60.0);
+        return minutes < 60
+            ? $"{Math.Max(minutes, 1)} min"
+            : string.Create(CultureInfo.InvariantCulture, $"{minutes / 60} h {minutes % 60:00} min");
+    }
+
+    public static string Grams(double grams) =>
+        grams.ToString(grams < 10 ? "0.#" : "0", CultureInfo.InvariantCulture) + " g";
+
+    public static string Date(DateTimeOffset moment) =>
+        moment.ToLocalTime().ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+
     public static string ImageUrl(string cacheKey, string file) => $"/img/{cacheKey}/{file}";
 
     /// <summary>The model's own title (MakerWorld/Bambu metadata) when it has one, otherwise the tidied file name.</summary>

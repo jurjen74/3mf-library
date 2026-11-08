@@ -125,6 +125,89 @@ public sealed class LibraryScannerTests : IDisposable
         Assert.Equal(1, _queries.Stats().Errors);
     }
 
+    [Fact]
+    public void Extracts_photos_plate_details_and_a_clean_description()
+    {
+        Write("Lamp.3mf", TestThreeMf.Bambu());
+        _scanner.Scan(CancellationToken.None);
+
+        var lamp = _queries.FindFile("Lamp.3mf")!;
+        Assert.Equal(3, lamp.PhotoCount);
+        var photos = _queries.Photos(lamp.Id);
+        Assert.Equal(["photo_1.webp", "photo_2.jpg", "photo_3.webp"], photos.Select(p => p.Image));
+        Assert.All(photos, p => Assert.True(File.Exists(Path.Combine(_options.CachePath, lamp.CacheKey!, p.Image))));
+
+        var plate = _queries.Plates(lamp.Id)[0];
+        Assert.Equal(["box.stl", "lid.stl"], plate.ObjectList);
+        Assert.Equal(1843, plate.PrintSeconds);
+
+        Assert.Equal("<p>Holds &amp; dispenses</p>", _queries.Description(lamp.Id));
+    }
+
+    [Theory]
+    [InlineData("lamp", "Stuff/Lampshade.3mf")]
+    [InlineData("LAMPSH", "Stuff/Lampshade.3mf")]
+    [InlineData("razor", "Stuff/Lampshade.3mf")]
+    [InlineData("thibault", "Stuff/Lampshade.3mf")]
+    [InlineData("box", "Stuff/Lampshade.3mf")]
+    [InlineData("stuff", "Stuff/Lampshade.3mf")]
+    [InlineData("kintsu vase", "Stuff/Kintsu_Shizu_Vase.3mf")]
+    [InlineData("dispenses", "Stuff/Lampshade.3mf")]
+    public void Search_matches_names_titles_designers_objects_and_folders(string query, string expected)
+    {
+        Write("Stuff/Lampshade.3mf", TestThreeMf.Bambu("Razor Blade Dispenser"));
+        Write("Stuff/Kintsu_Shizu_Vase.3mf", TestThreeMf.Prusa());
+        _scanner.Scan(CancellationToken.None);
+
+        Assert.Contains(expected, _queries.Search(query, 10).Select(f => f.Path));
+    }
+
+    [Fact]
+    public void Search_forgets_deleted_files()
+    {
+        Write("Lampshade.3mf", TestThreeMf.Bambu());
+        _scanner.Scan(CancellationToken.None);
+        File.Delete(Path.Combine(_options.LibraryPath, "Lampshade.3mf"));
+        _scanner.Scan(CancellationToken.None);
+
+        Assert.Empty(_queries.Search("lampshade", 10));
+    }
+
+    [Fact]
+    public async Task Defers_a_file_that_is_still_being_written()
+    {
+        var settling = new LibraryScanner(
+            new LibraryOptions { LibraryPath = _options.LibraryPath, DataPath = _options.DataPath, SettleDelay = TimeSpan.FromMilliseconds(400) },
+            new LibraryDb(_options), new LibraryPaths(_options), NullLogger<LibraryScanner>.Instance);
+        Write("Done.3mf", TestThreeMf.Bambu());
+        Write("Syncing.3mf", TestThreeMf.Bambu()[..100]);
+
+        var writer = Task.Run(async () =>
+        {
+            await Task.Delay(100);
+            await File.AppendAllTextAsync(Path.Combine(_options.LibraryPath, "Syncing.3mf"), "more bytes");
+        });
+        var result = settling.Scan(CancellationToken.None);
+        await writer;
+
+        Assert.Equal(1, result.Deferred);
+        Assert.NotNull(_queries.FindFile("Done.3mf"));
+        Assert.Null(_queries.FindFile("Syncing.3mf"));
+    }
+
+    [Fact]
+    public void Removes_cache_folders_nothing_points_to()
+    {
+        var stray = Path.Combine(_options.CachePath, "0123456789abcdef");
+        Directory.CreateDirectory(stray);
+        Write("Lamp.3mf", TestThreeMf.Bambu());
+
+        _scanner.Scan(CancellationToken.None);
+
+        Assert.False(Directory.Exists(stray));
+        Assert.True(Directory.Exists(Path.Combine(_options.CachePath, _queries.FindFile("Lamp.3mf")!.CacheKey!)));
+    }
+
     private void Write(string relativePath, byte[] content)
     {
         var path = Path.Combine(_options.LibraryPath, relativePath);

@@ -1,0 +1,69 @@
+@page "/search"
+@model SearchModel
+@using Library.Web.Pages.Shared
+
+<main class="content">
+    <h1>Search</h1>
+
+    <form class="search-large" action="/search" method="get" role="search">
+        <input type="search" name="q" value="@Model.Query" placeholder="Name, title, designer, folder or part…" aria-label="Search the library" autofocus>
+        <button type="submit" class="button primary">Search</button>
+    </form>
+
+    @if (Model.Query.Length > 0)
+    {
+        @if (Model.Folders.Count + Model.Models.Count + Model.OtherFiles.Count == 0)
+        {
+            <p class="empty">Nothing matches “@Model.Query”. Words match the start of names, so “lamp” finds “Lampshade” but “shade” does not.</p>
+        }
+
+        @if (Model.Folders.Count > 0)
+        {
+            <section>
+                <h2 class="section-title">Folders <span>@Model.Folders.Count</span></h2>
+                <ul class="folder-results">
+                    @foreach (var folder in Model.Folders)
+                    {
+                        <li>
+                            <a href="@Display.BrowseUrl(folder.Path)">
+                                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2h8.4A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-11Z" fill="currentColor"/></svg>
+                                <span>@folder.Path</span>
+                            </a>
+                            <span class="muted">@Display.Plural(folder.ModelCount, "model", "models")</span>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+
+        @if (Model.Models.Count > 0)
+        {
+            <section>
+                <h2 class="section-title">Models <span>@Model.Models.Count@(Model.Truncated ? "+" : "")</span></h2>
+                <div class="card-grid">
+                    @foreach (var file in Model.Models)
+                    {
+                        <partial name="_ModelCard" model="new ModelCard(file, ShowFolder: true)" />
+                    }
+                </div>
+            </section>
+        }
+
+        @if (Model.OtherFiles.Count > 0)
+        {
+            <section>
+                <h2 class="section-title">Other files <span>@Model.OtherFiles.Count</span></h2>
+                <ul class="file-list">
+                    @foreach (var file in Model.OtherFiles)
+                    {
+                        <li>
+                            <span class="file-icon kind--@file.Kind">@(System.IO.Path.GetExtension(file.Name).TrimStart('.').ToUpperInvariant())</span>
+                            <a class="file-list-name" href="@Display.FileUrl(file.Path)" title="@file.Path">@file.Path</a>
+                            <a class="download" href="@Display.DownloadUrl(file.Path)" download title="Download @file.Name">@Display.Size(file.Size)</a>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    }
+</main>

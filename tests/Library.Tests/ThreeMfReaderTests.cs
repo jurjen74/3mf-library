@@ -20,25 +20,49 @@ public class ThreeMfReaderTests
     }
 
     [Fact]
-    public void Undoes_bambu_double_escaped_description()
+    public void Undoes_bambu_double_escaped_description_and_quoted_attributes()
     {
         using var zip = TestThreeMf.Open(TestThreeMf.Bambu());
 
         var info = ThreeMfReader.Read(zip);
 
-        Assert.Equal("<p>Holds &amp; dispenses</p>", info.Description);
+        Assert.Contains("<p>Holds &amp; dispenses</p>", info.Description);
+        Assert.Contains("<img src=\"https://makerworld.example/a.jpg\">", info.Description);
     }
 
     [Fact]
-    public void Reads_plates_with_names_and_preview_entries()
+    public void Reads_plates_with_names_previews_objects_and_estimates()
     {
         using var zip = TestThreeMf.Open(TestThreeMf.Bambu());
 
         var info = ThreeMfReader.Read(zip);
 
         Assert.Collection(info.Plates,
-            p => Assert.Equal(new PlateInfo(1, "Body", "Metadata/plate_1.png", "Metadata/plate_1_small.png"), p),
-            p => Assert.Equal(new PlateInfo(2, null, "Metadata/plate_2.png", null), p));
+            p =>
+            {
+                Assert.Equal((1, "Body", "Metadata/plate_1.png", "Metadata/plate_1_small.png"), (p.Index, p.Name, p.ImageEntry, p.SmallImageEntry));
+                Assert.Equal(["box.stl", "lid.stl"], p.Objects);
+                Assert.Equal(1843, p.PrintSeconds);
+                Assert.Equal(5.94, p.WeightGrams);
+            },
+            p =>
+            {
+                Assert.Equal((2, null, "Metadata/plate_2.png", null), (p.Index, p.Name, p.ImageEntry, p.SmallImageEntry));
+                Assert.Empty(p.Objects);
+                Assert.Null(p.PrintSeconds);
+            });
+    }
+
+    [Fact]
+    public void Lists_model_photos_cover_first_in_natural_order()
+    {
+        using var zip = TestThreeMf.Open(TestThreeMf.Bambu());
+
+        var info = ThreeMfReader.Read(zip);
+
+        Assert.Equal(
+            ["Auxiliaries/Model Pictures/Cover.webp", "Auxiliaries/Model Pictures/2.jpeg", "Auxiliaries/Model Pictures/10.webp"],
+            info.PhotoEntries);
     }
 
     [Fact]

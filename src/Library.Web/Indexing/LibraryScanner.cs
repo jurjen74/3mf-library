@@ -17,20 +17,25 @@ public sealed record ScanResult(
     int Indexed,
     int Removed,
     int Errors,
-    TimeSpan Duration);
+    int Deferred,
+    TimeSpan Duration)
+{
+    public static ScanResult Offline(TimeSpan duration) => new(false, false, 0, 0, 0, 0, 0, 0, duration);
+}
 
 /// <summary>
-/// Walks the library, re-reads files whose size or modification time changed, and keeps the index and the preview
-/// cache in step. Never writes to the library itself.
+/// Walks the library, re-reads files whose size or modification time changed, and keeps the index, the search index
+/// and the preview cache in step. Never writes to the library itself.
 /// </summary>
 public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, LibraryPaths paths, ILogger<LibraryScanner> log)
 {
     /// <summary>Bump when extraction changes, so every file is re-read once.</summary>
-    public const int IndexerVersion = 1;
+    public const int IndexerVersion = 2;
 
     private const long MaxImageBytes = 16L * 1024 * 1024;
 
     private readonly IgnoreMatcher _ignore = new(options.Ignore);
+    private readonly DescriptionSanitizer _sanitizer = new();
 
     public ScanResult Scan(CancellationToken cancellationToken)
     {
@@ -40,7 +45,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         if (!Directory.Exists(options.LibraryPath))
         {
             log.LogWarning("Library folder {Path} is not available; keeping the existing index", options.LibraryPath);
-            return new ScanResult(false, false, 0, 0, 0, 0, 0, stopwatch.Elapsed);
+            return ScanResult.Offline(stopwatch.Elapsed);
         }
 
         Directory.CreateDirectory(options.CachePath);
@@ -51,21 +56,21 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
             "SELECT id, path, size, mtime, indexer_version, cache_key FROM files")
             .ToDictionary(f => f.Path, StringComparer.Ordinal);
 
+        var changed = walk.Files.Where(file =>
+                !existing.TryGetValue(file.Path, out var previous) ||
+                previous.Size != file.Size ||
+                previous.Mtime != file.Mtime ||
+                previous.IndexerVersion != IndexerVersion)
+            .ToList();
+
+        var (settled, deferred) = Settle(changed, cancellationToken);
+
         int indexed = 0, errors = 0;
-        foreach (var file in walk.Files)
+        foreach (var file in settled)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            existing.TryGetValue(file.Path, out var previous);
-            if (previous is not null &&
-                previous.Size == file.Size &&
-                previous.Mtime == file.Mtime &&
-                previous.IndexerVersion == IndexerVersion)
-            {
-                continue;
-            }
-
             indexed++;
-            if (!IndexFile(connection, file, previous))
+            if (!IndexFile(connection, file, existing.GetValueOrDefault(file.Path)))
             {
                 errors++;
             }
@@ -77,20 +82,59 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
             var seen = walk.Files.Select(f => f.Path).ToHashSet(StringComparer.Ordinal);
             foreach (var gone in existing.Values.Where(f => !seen.Contains(f.Path)))
             {
-                connection.Execute("DELETE FROM files WHERE id = @Id", new { gone.Id });
+                using var transaction = connection.BeginTransaction();
+                connection.Execute("DELETE FROM files_fts WHERE rowid = @Id", new { gone.Id }, transaction);
+                connection.Execute("DELETE FROM files WHERE id = @Id", new { gone.Id }, transaction);
+                transaction.Commit();
                 DeleteCacheDirectory(gone.CacheKey);
                 removed++;
             }
         }
 
         SyncFolders(connection, walk);
+        if (walk.Complete)
+        {
+            RemoveOrphanedCache(connection);
+        }
 
-        var result = new ScanResult(true, walk.Complete, walk.Folders.Count, walk.Files.Count, indexed, removed, errors, stopwatch.Elapsed);
+        var result = new ScanResult(true, walk.Complete, walk.Folders.Count, walk.Files.Count, indexed, removed, errors,
+            deferred, stopwatch.Elapsed);
         log.LogInformation(
-            "Scan finished in {Duration:0.0}s: {Files} files in {Folders} folders, {Indexed} (re)indexed, {Removed} removed, {Errors} errors{Partial}",
+            "Scan finished in {Duration:0.0}s: {Files} files in {Folders} folders, {Indexed} (re)indexed, {Removed} removed, {Errors} errors, {Deferred} still being written{Partial}",
             result.Duration.TotalSeconds, result.Files, result.Folders, result.Indexed, result.Removed, result.Errors,
-            result.Complete ? "" : " (partial walk: nothing removed)");
+            result.Deferred, result.Complete ? "" : " (partial walk: nothing removed)");
         return result;
+    }
+
+    /// <summary>
+    /// Cloud Sync writes files in parts and may keep the original modification time, so a new or changed file is only
+    /// read once its size and time stay the same over <see cref="LibraryOptions.SettleDelay"/>. The rest waits for the
+    /// next scan.
+    /// </summary>
+    private (List<WalkedFile> Settled, int Deferred) Settle(List<WalkedFile> changed, CancellationToken cancellationToken)
+    {
+        if (changed.Count == 0 || options.SettleDelay <= TimeSpan.Zero)
+        {
+            return (changed, 0);
+        }
+
+        cancellationToken.WaitHandle.WaitOne(options.SettleDelay);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var settled = new List<WalkedFile>(changed.Count);
+        foreach (var file in changed)
+        {
+            if (paths.TryGetFullPath(file.Path, out var fullPath))
+            {
+                var info = new FileInfo(fullPath);
+                if (info.Exists && info.Length == file.Size && ToUnixMs(info.LastWriteTimeUtc) == file.Mtime)
+                {
+                    settled.Add(file);
+                }
+            }
+        }
+
+        return (settled, changed.Count - settled.Count);
     }
 
     private WalkResult Walk(CancellationToken cancellationToken)
@@ -129,12 +173,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
                             pending.Push((entry.FullName, relative));
                             break;
                         case FileInfo info:
-                            files.Add(new WalkedFile(
-                                relative,
-                                directory.Relative,
-                                entry.Name,
-                                info.Length,
-                                new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds()));
+                            files.Add(new WalkedFile(relative, directory.Relative, entry.Name, info.Length, ToUnixMs(info.LastWriteTimeUtc)));
                             break;
                     }
                 }
@@ -163,12 +202,13 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
             IndexedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         };
         var plates = new List<PlateRecord>();
+        var photos = new List<string>();
 
         if (record.Kind == FileKinds.ThreeMf)
         {
             try
             {
-                ReadThreeMf(file, record, plates);
+                ReadThreeMf(file, record, plates, photos);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -177,7 +217,9 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
                 record.Error = ex.Message;
                 record.CacheKey = null;
                 record.Cover = record.CoverSmall = null;
+                record.PlateCount = record.PhotoCount = 0;
                 plates.Clear();
+                photos.Clear();
             }
         }
 
@@ -185,29 +227,52 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         {
             var id = connection.ExecuteScalar<long>("""
                 INSERT INTO files (path, folder, name, kind, size, mtime, indexer_version, cache_key, title, designer,
-                                   license, description, application, created, plate_count, colours, cover, cover_small,
-                                   error, indexed_at)
+                                   license, description, application, created, plate_count, photo_count, colours, cover,
+                                   cover_small, error, indexed_at)
                 VALUES (@Path, @Folder, @Name, @Kind, @Size, @Mtime, @IndexerVersion, @CacheKey, @Title, @Designer,
-                        @License, @Description, @Application, @Created, @PlateCount, @Colours, @Cover, @CoverSmall,
-                        @Error, @IndexedAt)
+                        @License, @Description, @Application, @Created, @PlateCount, @PhotoCount, @Colours, @Cover,
+                        @CoverSmall, @Error, @IndexedAt)
                 ON CONFLICT (path) DO UPDATE SET
                     folder = excluded.folder, name = excluded.name, kind = excluded.kind, size = excluded.size,
                     mtime = excluded.mtime, indexer_version = excluded.indexer_version, cache_key = excluded.cache_key,
                     title = excluded.title, designer = excluded.designer, license = excluded.license,
                     description = excluded.description, application = excluded.application, created = excluded.created,
-                    plate_count = excluded.plate_count, colours = excluded.colours, cover = excluded.cover,
-                    cover_small = excluded.cover_small, error = excluded.error, indexed_at = excluded.indexed_at
+                    plate_count = excluded.plate_count, photo_count = excluded.photo_count, colours = excluded.colours,
+                    cover = excluded.cover, cover_small = excluded.cover_small, error = excluded.error,
+                    indexed_at = excluded.indexed_at
                 RETURNING id
                 """, record, transaction);
 
             connection.Execute("DELETE FROM plates WHERE file_id = @id", new { id }, transaction);
             foreach (var plate in plates)
             {
-                connection.Execute(
-                    "INSERT INTO plates (file_id, idx, name, image, image_small) VALUES (@FileId, @Index, @Name, @Image, @ImageSmall)",
-                    plate with { FileId = id },
-                    transaction);
+                connection.Execute("""
+                    INSERT INTO plates (file_id, idx, name, image, image_small, objects, print_seconds, weight_grams)
+                    VALUES (@FileId, @Index, @Name, @Image, @ImageSmall, @Objects, @PrintSeconds, @WeightGrams)
+                    """, plate with { FileId = id }, transaction);
             }
+
+            connection.Execute("DELETE FROM photos WHERE file_id = @id", new { id }, transaction);
+            for (var i = 0; i < photos.Count; i++)
+            {
+                connection.Execute("INSERT INTO photos (file_id, idx, image) VALUES (@id, @idx, @image)",
+                    new { id, idx = i + 1, image = photos[i] }, transaction);
+            }
+
+            connection.Execute("DELETE FROM files_fts WHERE rowid = @id", new { id }, transaction);
+            connection.Execute(
+                "INSERT INTO files_fts (rowid, name, title, designer, folder, objects, description) VALUES (@id, @name, @title, @designer, @folder, @objects, @description)",
+                new
+                {
+                    id,
+                    name = Path.GetFileNameWithoutExtension(record.Name),
+                    title = record.Title,
+                    designer = record.Designer,
+                    folder = record.Folder,
+                    objects = string.Join(' ', plates.SelectMany(p => p.ObjectList).Distinct(StringComparer.Ordinal)),
+                    description = DescriptionSanitizer.ToPlainText(record.Description),
+                },
+                transaction);
 
             transaction.Commit();
         }
@@ -220,7 +285,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         return record.Error is null;
     }
 
-    private void ReadThreeMf(WalkedFile file, FileRecord record, List<PlateRecord> plates)
+    private void ReadThreeMf(WalkedFile file, FileRecord record, List<PlateRecord> plates, List<string> photos)
     {
         if (!paths.TryGetFullPath(file.Path, out var fullPath))
         {
@@ -235,7 +300,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         record.Title = info.Title;
         record.Designer = info.Designer;
         record.License = info.License;
-        record.Description = info.Description;
+        record.Description = _sanitizer.Sanitize(info.Description);
         record.Application = info.Application;
         record.Created = info.CreationDate;
         record.PlateCount = info.Plates.Count;
@@ -261,7 +326,13 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
                     ThreeMfReader.CopyEntry(zip.GetEntry(plate.SmallImageEntry)!, Path.Combine(staging, small), MaxImageBytes);
                 }
 
-                plates.Add(new PlateRecord(0, plate.Index, plate.Name, image, small));
+                plates.Add(new PlateRecord(0, plate.Index, plate.Name, image, small,
+                    plate.Objects.Count > 0 ? JsonSerializer.Serialize(plate.Objects) : null,
+                    plate.PrintSeconds, plate.WeightGrams)
+                {
+                    ObjectList = plate.Objects,
+                });
+
                 if (record.Cover is null && image is not null)
                 {
                     record.Cover = image;
@@ -274,6 +345,15 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
                 record.Cover = record.CoverSmall = "cover.png";
                 ThreeMfReader.CopyEntry(zip.GetEntry(info.FallbackCoverEntry)!, Path.Combine(staging, "cover.png"), MaxImageBytes);
             }
+
+            foreach (var entryName in info.PhotoEntries)
+            {
+                var photo = $"photo_{photos.Count + 1}.{ThreeMfReader.PhotoExtension(entryName)}";
+                ThreeMfReader.CopyEntry(zip.GetEntry(entryName)!, Path.Combine(staging, photo), MaxImageBytes);
+                photos.Add(photo);
+            }
+
+            record.PhotoCount = photos.Count;
 
             var target = Path.Combine(options.CachePath, key);
             if (Directory.Exists(target))
@@ -310,6 +390,20 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         transaction.Commit();
     }
 
+    /// <summary>Removes cache folders no file points to any more (after an index reset or an interrupted scan).</summary>
+    private void RemoveOrphanedCache(SqliteConnection connection)
+    {
+        var used = connection.Query<string>("SELECT cache_key FROM files WHERE cache_key IS NOT NULL")
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var directory in Directory.EnumerateDirectories(options.CachePath))
+        {
+            if (!used.Contains(Path.GetFileName(directory)))
+            {
+                DeleteCacheDirectory(Path.GetFileName(directory));
+            }
+        }
+    }
+
     private void DeleteCacheDirectory(string? key)
     {
         if (key is null)
@@ -337,6 +431,8 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         var input = Encoding.UTF8.GetBytes($"{file.Path}\n{file.Size}\n{file.Mtime}\n{IndexerVersion}");
         return Convert.ToHexStringLower(SHA256.HashData(input))[..16];
     }
+
+    private static long ToUnixMs(DateTime utc) => new DateTimeOffset(utc).ToUnixTimeMilliseconds();
 
     private sealed record WalkedFolder(string Path, string? Parent, string Name);
 
@@ -372,11 +468,23 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         public string? Application { get; set; }
         public string? Created { get; set; }
         public int PlateCount { get; set; }
+        public int PhotoCount { get; set; }
         public string? Colours { get; set; }
         public string? Cover { get; set; }
         public string? CoverSmall { get; set; }
         public string? Error { get; set; }
     }
 
-    private sealed record PlateRecord(long FileId, int Index, string? Name, string? Image, string? ImageSmall);
+    private sealed record PlateRecord(
+        long FileId,
+        int Index,
+        string? Name,
+        string? Image,
+        string? ImageSmall,
+        string? Objects,
+        int? PrintSeconds,
+        double? WeightGrams)
+    {
+        public IReadOnlyList<string> ObjectList { get; init; } = [];
+    }
 }

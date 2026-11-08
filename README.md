@@ -54,6 +54,7 @@ The site is at `http://192.168.2.213:8085`. The NFS volume in `docker-compose.ym
 | `LIBRARY_PATH` | `/library` | Library root (read-only) |
 | `DATA_PATH` | `/data` | SQLite index, preview cache, data-protection keys |
 | `SCAN_INTERVAL` | `00:03:00` | How often the library is re-walked; only changed files are re-read |
+| `SETTLE_DELAY` | `00:00:10` | A new or changed file is only read once its size and time stay the same this long (Cloud Sync writes in parts) |
 | `IGNORE` | see `LibraryOptions` | `;`-separated name globs to skip; dotfiles are always skipped |
 | `SITE_TITLE` | `3D Print library` | |
 

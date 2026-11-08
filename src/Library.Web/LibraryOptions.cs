@@ -18,6 +18,9 @@ public sealed class LibraryOptions
 
     public TimeSpan ScanInterval { get; init; } = TimeSpan.FromMinutes(3);
 
+    /// <summary>How long a new or changed file must stay unchanged before it is read (Cloud Sync writes in parts).</summary>
+    public TimeSpan SettleDelay { get; init; } = TimeSpan.Zero;
+
     public IReadOnlyList<string> Ignore { get; init; } = DefaultIgnore;
 
     public string SiteTitle { get; init; } = "3D Print library";
@@ -34,6 +37,10 @@ public sealed class LibraryOptions
             ? parsed
             : TimeSpan.FromMinutes(3);
 
+        var settle = TimeSpan.TryParse(config["SETTLE_DELAY"], CultureInfo.InvariantCulture, out var parsedSettle) && parsedSettle >= TimeSpan.Zero
+            ? parsedSettle
+            : TimeSpan.FromSeconds(10);
+
         var ignore = config["IGNORE"] is { Length: > 0 } list
             ? list.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : DefaultIgnore;
@@ -43,6 +50,7 @@ public sealed class LibraryOptions
             LibraryPath = Resolve(config["LIBRARY_PATH"] ?? "/library"),
             DataPath = Resolve(config["DATA_PATH"] ?? "/data"),
             ScanInterval = interval,
+            SettleDelay = settle,
             Ignore = ignore,
             SiteTitle = config["SITE_TITLE"] is { Length: > 0 } title ? title : "3D Print library",
         };
