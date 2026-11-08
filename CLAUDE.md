@@ -64,8 +64,9 @@ src/Library.Web/
   Auth/                 UserStore (users.db), FavouriteStore, Session (cookie, security stamp, forced change), TrustedNetwork
   Pages/                Browse, File, Search, Recent, Favourites, Login, Setup, Account, Users, Logout, Error
                         Shared/ModelListView: ?sort= / ?type= (3mf|stl) as plain links; Browse ?all=1 = include subfolders
-  wwwroot/              css/site.css, js/site.js (classic), js/theme.js (in <head>: light/dark choice, localStorage
-                        `library.theme`), js/viewer.js (ES module), lib/three (three.js 0.186.1, vendored), icons/
+  wwwroot/              css/site.css, js/site.js (classic), js/head.js (in <head>: light/dark choice, localStorage
+                        `library.theme`; page-transition hooks), js/viewer.js (ES module), lib/three (three.js 0.186.1, vendored), icons/,
+                        fonts/ (Inter, OFL), backgrounds/ (login photos per theme, generated with Magnific, JPEG 1920 px)
 tests/Library.Tests/    xUnit v3 (Microsoft Testing Platform); synthetic fixtures only (TestThreeMf, TestMeshes)
 tools/mac-opener/       macOS helper for threemflib:// links: build.sh (osacompile + URL scheme + ad-hoc sign),
                         opener.applescript, open-model.sh (decoding, checks; DRY_RUN=1 / LIBRARY_ROOT for testing)
@@ -145,6 +146,10 @@ Razor views are compiled at build time: restart `dotnet run` after editing `.csh
 - CSS `display: block` on an element overrides its `hidden` attribute; add `[hidden] { display: none }` rules.
 - Bambu 3MFs: model metadata stops at `<resources>`; description HTML is escaped twice plus `&#34;` for attribute
   quotes, and title/designer/license are escaped twice too (`Dooku&amp;apos;s`); painted colours are per-triangle hex trees read from the last character (`DominantPaintState`).
+- Static files outside the anonymous/forced-password-change allow-list (`Session.OpenWhileChangeRequired`) get
+  redirected: add new top-level `wwwroot` folders there (fonts/ and backgrounds/ were missed once).
+- macOS `sips` AVIF output decodes in an `<img>` but isn't painted as a CSS background in Chromium, and the static
+  assets SDK has no `.avif` content type: the login backgrounds are plain JPEG.
 - Bambu Studio strips `../`-like sequences from slicer URLs; keep the last URL segment plain (`SlicerLinks.SafeName`).
 
 ## Working with the owner

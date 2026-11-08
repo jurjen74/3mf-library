@@ -56,6 +56,29 @@
     });
   }
 
+  // Images that are still loading shimmer, then fade in (site.css .img-pending); loaded ones are left alone.
+  for (const image of document.querySelectorAll(".card-thumb img, .mosaic img, .plate-thumb img, .photo-grid img, .file-thumb")) {
+    if (image.complete) continue;
+    image.classList.add("img-pending");
+    const shown = () => image.classList.remove("img-pending");
+    image.addEventListener("load", shown, { once: true });
+    image.addEventListener("error", shown, { once: true });
+  }
+
+  // File page: the plate strip starts with the current plate in view and fades out at an edge with more plates.
+  const strip = document.querySelector(".plate-strip");
+  if (strip) {
+    const current = strip.querySelector("[aria-current]")?.closest("li");
+    if (current) strip.scrollLeft = current.offsetLeft - (strip.clientWidth - current.offsetWidth) / 2;
+    const fades = () => {
+      strip.classList.toggle("fade-start", strip.scrollLeft > 4);
+      strip.classList.toggle("fade-end", strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 4);
+    };
+    strip.addEventListener("scroll", fades, { passive: true });
+    window.addEventListener("resize", fades);
+    fades();
+  }
+
   // Light/dark: the header button flips between the two; Account → Appearance can go back to the system setting.
   const theme = window.libraryTheme;
   const themeToggle = document.querySelector(".theme-toggle");
@@ -227,6 +250,30 @@
     });
   }
 
+  // Short messages at the bottom of the screen ("Added to favourites"), with an optional link.
+  let toastTimer;
+  const toast = (text, link) => {
+    let box = document.querySelector(".toast");
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "toast";
+      box.setAttribute("role", "status");
+      document.body.append(box);
+    }
+    box.replaceChildren(document.createTextNode(text));
+    if (link) {
+      const anchor = document.createElement("a");
+      anchor.href = link.href;
+      anchor.textContent = link.text;
+      box.append(anchor);
+    }
+    box.classList.remove("toast--shown");
+    void box.offsetWidth; // restart the entrance animation when a second message follows quickly
+    box.classList.add("toast--shown");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => box.classList.remove("toast--shown"), 2800);
+  };
+
   // Star buttons: toggle a favourite without leaving the page.
   const token = () => document.querySelector('#request-token input[name="__RequestVerificationToken"]')?.value ?? "";
   document.addEventListener("click", async (event) => {
@@ -244,9 +291,18 @@
         b.title = favourite ? "Remove from favourites" : "Add to favourites";
         const label = b.querySelector(".fav-label");
         if (label) label.textContent = favourite ? "Favourite" : "Add to favourites";
+        if (favourite) {
+          b.classList.remove("pop");
+          void b.offsetWidth;
+          b.classList.add("pop");
+          b.addEventListener("animationend", () => b.classList.remove("pop"), { once: true });
+        }
       });
+      const onFavourites = window.location.pathname.startsWith("/favourites");
+      toast(favourite ? "Added to favourites" : "Removed from favourites",
+        favourite && !onFavourites ? { href: "/favourites", text: "View" } : null);
     } catch {
-      window.alert("Could not update your favourites. Reload the page and try again.");
+      toast("Could not update your favourites. Reload the page and try again.");
     }
   });
 

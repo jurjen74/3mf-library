@@ -1,3 +1,24 @@
+/* Inter (variable weight, SIL OFL: fonts/Inter-OFL.txt), served from the site itself. The second file only loads
+   for accented letters beyond Latin-1. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
   --bg: #f5f4f1;
   --surface: #ffffff;
@@ -13,11 +34,16 @@
   --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 4px 14px rgb(0 0 0 / 0.04);
   --radius: 12px;
   --on-accent: #fff;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --login-image: url("/backgrounds/login-light.jpg");
+  --login-veil: linear-gradient(180deg, rgb(245 244 241 / 0.15), rgb(245 244 241 / 0.45));
   color-scheme: light dark;
 }
 
 /* Dark colours: from the system setting, unless this browser chose a theme (data-theme on <html>, set by
-   js/theme.js from localStorage "library.theme"). Keep the two copies below the same. */
+   js/head.js from localStorage "library.theme"). Keep the two copies below the same. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #131416;
@@ -32,6 +58,8 @@
     --warn: #f08a5d;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     --on-accent: #0d1526;
+    --login-image: url("/backgrounds/login-dark.jpg");
+    --login-veil: linear-gradient(180deg, rgb(19 20 22 / 0.1), rgb(19 20 22 / 0.45));
     color-scheme: dark;
   }
 }
@@ -48,6 +76,8 @@
   --warn: #f08a5d;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
   --on-accent: #0d1526;
+  --login-image: url("/backgrounds/login-dark.jpg");
+  --login-veil: linear-gradient(180deg, rgb(19 20 22 / 0.1), rgb(19 20 22 / 0.45));
   color-scheme: dark;
 }
 :root[data-theme="light"] { color-scheme: light; }
@@ -63,13 +93,26 @@ body {
   flex-direction: column;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.5 var(--font);
+  font-feature-settings: "cv11", "ss03";  /* Inter: single-storey a, rounder quotes and commas */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+
+button, input, select, textarea { font-family: inherit; }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-h1 { font-size: 1.6rem; margin: 0.2rem 0 1.25rem; letter-spacing: -0.01em; }
+h1 { font-size: 1.75rem; font-weight: 700; line-height: 1.2; margin: 0.25rem 0 1.25rem; letter-spacing: -0.022em; }
+h2 { letter-spacing: -0.012em; }
+h1, h2, h3 { text-wrap: balance; }
+p, li, dd { text-wrap: pretty; }
+
+/* Numbers that sit in columns or change (counts, sizes, dates) keep equal widths. */
+.count, .segmented-count, .download, .facts dd, .pager-count, .topbar-stats, .section-title span,
+.folder-meta .muted, .badge, .stage-meta, .file-list .download { font-variant-numeric: tabular-nums; }
 
 .muted { color: var(--muted); }
 .warn { color: var(--warn); }
@@ -297,15 +340,16 @@ section + section { margin-top: 2rem; }
 .card-body h3 {
   margin: 0;
   font-size: 0.95rem;
-  font-weight: 620;
+  font-weight: 600;
   line-height: 1.3;
+  letter-spacing: -0.006em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 .card-body p { margin: 0; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-name { color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.72rem !important; }
+.file-name { color: var(--muted); font-family: var(--mono); font-size: 0.72rem !important; }
 
 .card-foot {
   margin-top: auto;
@@ -435,8 +479,6 @@ section + section { margin-top: 2rem; }
 
 /* Cards are links now */
 a.card-thumb { display: block; }
-a.card-thumb:hover img { transform: scale(1.03); }
-.card-thumb img { transition: transform 0.2s ease; }
 .card-body h3 a { color: inherit; }
 .card-folder a { color: var(--muted); font-size: 0.75rem; }
 
@@ -1099,4 +1141,268 @@ details.reset > summary::-webkit-details-marker { display: none; }
     margin-bottom: 0.25rem;
   }
   .topbar.has-menu.menu-open .theme-label { position: static; width: auto; height: auto; clip-path: none; }
+}
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Polish: cards, loading images, page transitions, empty states. Motion is off for "reduce motion" (end of file).
+   --------------------------------------------------------------------------------------------------------------- */
+
+/* Cards lift a little under the pointer. */
+.card, .folder-tile { transition: transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out), border-color 0.2s; }
+@media (hover: hover) {
+  .card:hover, .folder-tile:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 2px 4px rgb(0 0 0 / 0.04), 0 12px 28px rgb(0 0 0 / 0.1);
+  }
+  .card:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+}
+a.card-thumb:hover img { transform: scale(1.035); }
+.card-thumb img { transition: transform 0.35s var(--ease-out), opacity 0.35s var(--ease-out); }
+
+/* Colours share the bottom line with the download button and overlap like avatars. */
+.card-body { gap: 0.2rem; }
+.card-meta { display: flex; align-items: center; gap: 0.45rem; min-width: 0; flex: 1; }
+.card-meta .swatches { flex-wrap: nowrap; gap: 0; flex: none; }
+.card-meta .swatches svg + svg { margin-left: -3px; }
+.card-meta .swatches circle { stroke: var(--surface); stroke-opacity: 1; stroke-width: 1.5; }
+.card-body .card-designer { color: var(--muted); font-size: 0.78rem; }
+.card-foot { padding-top: 0.6rem; }
+
+/* Images: a soft shimmer while loading, then a fade-in (site.js marks images that weren't loaded yet). */
+.img-pending { opacity: 0; }
+.mosaic img, .plate-thumb img, .file-thumb { transition: opacity 0.35s var(--ease-out); }
+.photo-grid img { transition: transform 0.2s ease, opacity 0.35s var(--ease-out); }
+.card-thumb:has(> img.img-pending),
+.mosaic:has(> img.img-pending),
+.plate-thumb:has(> img.img-pending),
+.photo-grid a:has(> img.img-pending) {
+  background-image: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.22) 50%, transparent 70%), var(--thumb);
+  background-size: 250% 100%, 100% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.photo-grid a:has(> img.img-pending) {
+  background-image: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.22) 50%, transparent 70%);
+  background-color: var(--surface-2);
+}
+@keyframes shimmer {
+  from { background-position: 150% 0, 0 0; }
+  to { background-position: -100% 0, 0 0; }
+}
+
+/* Page transitions (Chrome, Edge, Safari): a quick cross-fade, and the clicked preview grows into the file page. */
+@view-transition { navigation: auto; }
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 0.22s; animation-timing-function: var(--ease-out); }
+::view-transition-group(model-preview) { animation-duration: 0.38s; animation-timing-function: var(--ease-out); }
+::view-transition-old(model-preview),
+::view-transition-new(model-preview) { height: 100%; object-fit: contain; }
+.topbar { view-transition-name: topbar; }
+.sidebar { view-transition-name: sidebar; }
+.vt-preview, .file-page .stage > img { view-transition-name: model-preview; }
+
+/* Not found and other empty states. */
+.empty-state {
+  max-width: 34rem;
+  margin: 3rem auto 2rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.empty-state h1 { margin: 1rem 0 0.5rem; }
+.empty-state p { margin: 0 0 1.5rem; }
+.empty-state-icon { width: 76px; height: 76px; color: var(--accent); opacity: 0.85; }
+.empty-state-name { color: var(--text); overflow-wrap: anywhere; }
+.empty-state-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; margin-bottom: 1.25rem; }
+.empty-state-search { width: 100%; margin: 0; }
+
+/* Login, first-run setup and forced password change: a photo of a print (made with Magnific) behind a glass card.
+   The image follows the theme (--login-image in the colour blocks above). */
+body:has(.login-page)::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--login-veil), var(--login-image) center / cover no-repeat;
+}
+body:has(.login-page) .topbar { background: transparent; border-bottom-color: transparent; }
+body:has(.login-page) .footer { border-top-color: transparent; }
+.login-page .login-card {
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.06), 0 24px 60px rgb(0 0 0 / 0.22);
+}
+.login-page .forced-logout { padding: 0.35rem 0.8rem; border-radius: 999px; background: color-mix(in srgb, var(--surface) 70%, transparent); }
+
+/* Long links in descriptions (MakerWorld URLs) wrap instead of widening the page on phones. */
+.prose { overflow-wrap: anywhere; }
+
+/* Phones: the file page's actions (previous/next, star, download) stay at the bottom of the screen. */
+@media (max-width: 800px) {
+  body:has(.file-page) { padding-bottom: 4.6rem; }
+  .file-page .file-actions {
+    position: fixed;
+    z-index: 9;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem max(0.6rem, env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface) 86%, transparent);
+    backdrop-filter: saturate(1.4) blur(14px);
+    -webkit-backdrop-filter: saturate(1.4) blur(14px);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 20px rgb(0 0 0 / 0.08);
+    view-transition-name: file-actions;
+  }
+  .file-page .file-actions .fav-label,
+  .file-page .file-actions .slicer-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .file-page .file-actions .button.primary { flex: 1; min-width: 0; justify-content: center; }
+  .file-page .file-actions .download-word { display: none; }
+  .file-page .file-actions .pager { flex: none; }
+  body:has(.file-page) .toast { bottom: 5.4rem; }
+}
+
+/* Plate strip: snaps to whole plates and fades out at an edge where more plates are (site.js sets fade-*). */
+.plate-strip {
+  position: relative;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  --fade-start: 0px;
+  --fade-end: 0px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+}
+.plate-strip.fade-start { --fade-start: 44px; }
+.plate-strip.fade-end { --fade-end: 44px; }
+.plate-strip li { flex: none; scroll-snap-align: start; }
+.plate-thumb { transition: border-color 0.15s, transform 0.2s var(--ease-out); }
+.plate-thumb:hover { transform: translateY(-2px); }
+
+/* Recent: a calendar tile, half a card wide, starts each day inside the one grid (cards span two columns). */
+.card-grid--days { grid-template-columns: repeat(auto-fill, minmax(calc((clamp(210px, 9vw, 300px) - 1rem) / 2), 1fr)); }
+.card-grid--days > .card { grid-column: span 2; }
+/* Phones: two cards a row is too narrow for a tile; each day starts with a thin date line instead. */
+@media (max-width: 800px) {
+  .card-grid--days { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); }
+  .card-grid--days > .card { grid-column: auto; }
+  .card-grid--days > .day-tile {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.4rem;
+    min-height: 0;
+    padding: 0.75rem 0 0;
+    border: 0;
+    background: none;
+  }
+  .card-grid--days > .day-tile:first-child { padding-top: 0; }
+  .card-grid--days .day-tile-day { font-size: 1.15rem; letter-spacing: 0; margin: 0; order: -2; }
+  .card-grid--days .day-tile-month { font-size: 1.15rem; margin: 0; order: -1; }
+  .card-grid--days .day-tile-label { font-size: 0.85rem; letter-spacing: 0; text-transform: none; }
+  .card-grid--days .day-tile-count { margin: 0; }
+  .card-grid--days .day-tile-count::before { content: "· "; }
+}
+.day-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 0.85rem 0.8rem;
+  min-width: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+    var(--surface);
+  min-height: 9rem;
+}
+.day-tile-label { font-size: 0.68rem; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); overflow-wrap: anywhere; }
+.day-tile-day { font-size: 3rem; font-weight: 700; line-height: 1; letter-spacing: -0.04em; margin-top: auto; font-variant-numeric: tabular-nums; }
+.day-tile-month { font-size: 0.95rem; font-weight: 600; margin-top: 0.15rem; overflow-wrap: anywhere; }
+.day-tile-count { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; font-variant-numeric: tabular-nums; }
+
+/* Header search: a "/" hint on computers; the counts moved to the footer. */
+.search-key {
+  flex: none;
+  font: 600 0.72rem/1.4 var(--font);
+  color: var(--muted);
+  padding: 0 0.38rem;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+}
+.topbar-search:focus-within .search-key,
+.topbar-search input:not(:placeholder-shown) ~ .search-key { display: none; }
+@media (hover: none), (max-width: 800px) {
+  .search-key { display: none; }
+}
+.footer-stats { font-variant-numeric: tabular-nums; }
+
+/* Star "pop" when a model becomes a favourite, and short messages at the bottom of the screen. */
+.fav-toggle.pop svg { animation: star-pop 0.5s var(--ease-out); }
+@keyframes star-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.45) rotate(-10deg); }
+  70% { transform: scale(0.9) rotate(4deg); }
+  100% { transform: scale(1); }
+}
+.toast {
+  position: fixed;
+  z-index: 50;
+  left: 50%;
+  bottom: 1.25rem;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.65rem 1.1rem;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.9rem;
+  font-weight: 550;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.25);
+  opacity: 0;
+  transform: translate(-50%, 0.75rem) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.22s var(--ease-out), transform 0.3s var(--ease-out);
+}
+.toast--shown { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Menus and folders open smoothly where the browser can animate them (others just open). */
+:root { interpolate-size: allow-keywords; }
+.tree details::details-content,
+.tree-panel::details-content {
+  height: 0;
+  overflow: clip;
+  transition: height 0.25s var(--ease-out), content-visibility 0.25s allow-discrete;
+}
+.tree details[open]::details-content,
+.tree-panel[open]::details-content { height: auto; }
+@media (max-width: 800px) {
+  .topbar.has-menu .topbar-nav {
+    transform-origin: top right;
+    transition: opacity 0.16s var(--ease-out), transform 0.22s var(--ease-out), display 0.22s allow-discrete;
+  }
+  .topbar.has-menu:not(.menu-open) .topbar-nav { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  @starting-style {
+    .topbar.has-menu.menu-open .topbar-nav { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  }
+}
+
+/* Empty states inside a page (no favourites, no search results, empty folder). */
+.empty-state--compact { margin: 2rem auto; }
+.empty-state--compact h2 { font-size: 1.25rem; margin: 0.9rem 0 0.4rem; }
+.empty-state--compact .empty-state-icon { width: 64px; height: 64px; }
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

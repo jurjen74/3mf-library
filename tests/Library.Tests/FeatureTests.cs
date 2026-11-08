@@ -223,6 +223,33 @@ public sealed partial class FeatureTests : IDisposable
         Assert.Equal(3, Cards(await Page(client, "/browse/Kits?all=1&type=nope&sort=nope", Lan)).Count);
     }
 
+    [Theory]
+    [InlineData("/browse/Kits/Nope/Deeper", "/browse/Kits", "Deeper")]
+    [InlineData("/file/Kits/Robot/gone_arm.3mf", "/browse/Kits/Robot", "gone arm")]
+    [InlineData("/file/Elsewhere/x.stl", "/browse", "x")]
+    public async Task Missing_folders_and_files_get_a_page_pointing_at_the_nearest_folder(string url, string nearest, string search)
+    {
+        var response = await Send(Client(), url, Lan);
+        var page = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Contains("<h1>Not found</h1>", page);
+        Assert.Contains($"class=\"button primary\" href=\"{nearest}\"", page);
+        Assert.Contains($"name=\"q\" value=\"{search}\"", page);
+    }
+
+    [Fact]
+    public async Task Previews_downloads_and_slicer_links_keep_a_bare_404()
+    {
+        var image = await Send(Client(), "/img/0123456789abcdef/plate_1.png", Lan);
+        var slicerLink = await Send(Client(), "/dl/not-a-token/x.3mf", Outside);
+
+        Assert.Equal(HttpStatusCode.NotFound, image.StatusCode);
+        Assert.Empty(await image.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.NotFound, slicerLink.StatusCode);
+        Assert.Empty(await slicerLink.Content.ReadAsStringAsync());
+    }
+
     private static List<string> Cards(string html) => CardPattern().Matches(html).Select(m => m.Groups[1].Value).ToList();
 
     [GeneratedRegex("class=\"card-thumb\" href=\"([^\"]+)\"")]

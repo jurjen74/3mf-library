@@ -107,6 +107,13 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
 }
 
+// Missing folders and files get a proper page (nearest existing folder, search). Everything else — previews,
+// downloads, slicer links — keeps its bare 404, so a slicer or <img> never receives a login redirect or HTML.
+app.UseWhen(
+    context => HttpMethods.IsGet(context.Request.Method) &&
+               (context.Request.Path.StartsWithSegments("/browse") || context.Request.Path.StartsWithSegments("/file")),
+    branch => branch.UseStatusCodePagesWithReExecute("/not-found"));
+
 app.Use(async (context, next) =>
 {
     var headers = context.Response.Headers;

@@ -35,21 +35,26 @@
     </div>
     <div class="card-body">
         <h3 title="@title"><a href="@url">@title</a></h3>
-        <p class="file-name" title="@file.Name">@file.Name</p>
+        @if (file.Designer is not null)
+        {
+            <p class="card-designer" title="by @file.Designer">by @file.Designer</p>
+        }
+        @if (Model.ShowFileName)
+        {
+            <p class="file-name" title="@file.Name">@file.Name</p>
+        }
         @if (Model.FolderLabel is { } folderLabel)
         {
             <p class="card-folder"><a href="@Display.BrowseUrl(file.Folder)" title="@folderLabel">@Model.FolderShort</a></p>
-        }
-        @if (file.Designer is not null)
-        {
-            <p class="muted">by @file.Designer</p>
         }
         @if (file.Error is not null)
         {
             <p class="warn" title="@file.Error">@file.Error</p>
         }
         <div class="card-foot">
-            <partial name="_Swatches" model="file.ColourList.Take(8).ToList()" />
+            <div class="card-meta">
+                <partial name="_Swatches" model="file.ColourList.Take(8).ToList()" />
+            </div>
             <a class="download" href="@Display.DownloadUrl(file.Path)" download title="Download @file.Name">
                 <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4.5-4.5M12 14l-4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 @Display.Size(file.Size)

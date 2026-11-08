@@ -1,6 +1,10 @@
 @page "/recent"
 @model RecentModel
 @using Library.Web.Pages.Shared
+@{
+    var today = DateOnly.FromDateTime(DateTime.Now);
+    var culture = System.Globalization.CultureInfo.InvariantCulture;
+}
 
 <main class="content">
     <h1>Recent</h1>
@@ -12,18 +16,23 @@
     }
     else
     {
-        var groups = Model.Models.GroupBy(f => Display.Date(f.Modified));
-        foreach (var group in groups)
-        {
-            <section>
-                <h2 class="section-title">@group.Key <span>@group.Count()</span></h2>
-                <div class="card-grid">
-                    @foreach (var file in group)
-                    {
-                        <partial name="_ModelCard" model="new ModelCard(file, ShowFolder: true)" />
-                    }
+        @* One grid for all days: a small calendar tile starts each day, so days with few models leave no gaps. *@
+        <div class="card-grid card-grid--days">
+            @foreach (var group in Model.Models.GroupBy(f => DateOnly.FromDateTime(f.Modified.LocalDateTime)))
+            {
+                var day = group.Key;
+                var label = day == today ? "Today" : day == today.AddDays(-1) ? "Yesterday" : day.ToString("dddd", culture);
+                <div class="day-tile" role="heading" aria-level="2">
+                    <span class="day-tile-label">@label</span>
+                    <span class="day-tile-day">@day.Day</span>
+                    <span class="day-tile-month">@day.ToString(day.Year == today.Year ? "MMM" : "MMM yyyy", culture)</span>
+                    <span class="day-tile-count">@Display.Plural(group.Count(), "model", "models")</span>
                 </div>
-            </section>
-        }
+                @foreach (var file in group)
+                {
+                    <partial name="_ModelCard" model="new ModelCard(file, ShowFolder: true)" />
+                }
+            }
+        </div>
     }
 </main>

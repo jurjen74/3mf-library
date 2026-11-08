@@ -1,0 +1,38 @@
+@page "/not-found"
+@model NotFoundModel
+@{
+    var nearestName = Model.Nearest.Length == 0 ? "the library" : Model.Nearest[(Model.Nearest.LastIndexOf('/') + 1)..];
+}
+<main class="content">
+    <div class="empty-state">
+        <svg class="empty-state-icon" viewBox="0 0 64 64" aria-hidden="true">
+            <path d="M32 6 9 19v26l23 13 23-13V19L32 6Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="5 5"/>
+            <path d="M26.5 27a5.5 5.5 0 1 1 7.6 5.1c-1.3.6-2.1 1.8-2.1 3.2V37" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="32" cy="43.5" r="2" fill="currentColor"/>
+        </svg>
+        <h1>Not found</h1>
+        @if (Model.Missing is not null)
+        {
+            <p class="muted">
+                @(Model.MissingFile ? "The file" : "The folder") <strong class="empty-state-name">@Model.Missing</strong> isn't in the
+                library (any more). It may have been moved or renamed in OneDrive.
+            </p>
+        }
+        else
+        {
+            <p class="muted">This page doesn't exist.</p>
+        }
+
+        <div class="empty-state-actions">
+            <a class="button primary" href="@Display.BrowseUrl(Model.Nearest)">
+                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2h8.4A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-11Z" fill="currentColor"/></svg>
+                Open @nearestName
+            </a>
+        </div>
+
+        <form class="search-large empty-state-search" action="/search" method="get" role="search">
+            <input type="search" name="q" value="@Model.SearchText" placeholder="Search the library…" aria-label="Search the library">
+            <button type="submit" class="button">Search</button>
+        </form>
+    </div>
+</main>
