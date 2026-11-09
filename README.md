@@ -11,6 +11,8 @@ A self-hosted preview site for a folder of 3D print files. Point it at the folde
   UltiMaker Cura, Creality Print, ElegooSlicer; PrusaSlicer through the local-copy helper).
 - **Accounts** with an admin, optional "no login at home", light and dark mode, installable as an app on a phone.
 
+**Documentation, with screenshots: [www.3mf-library.com](https://www.3mf-library.com)**
+
 It's one small container (ASP.NET Core, .NET 10). The library is mounted **read-only**: the site never changes, moves or
 deletes your files. Organise them in folders as you like; the folders are the only organisation the site uses.
 

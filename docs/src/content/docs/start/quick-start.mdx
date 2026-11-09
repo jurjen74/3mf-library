@@ -1,0 +1,61 @@
+---
+title: Quick start
+description: Install 3MF Library with Docker Compose in a few minutes.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+This sets up the site with Docker Compose on the machine that will run it. You need Docker with the Compose plugin
+(`docker compose version` should work).
+
+<Steps>
+
+1. **Get the compose files.** Make a folder for the site and download the compose file, the optional NFS add-on and the
+   example settings:
+
+   ```bash
+   mkdir 3mf-library && cd 3mf-library
+   curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/docker-compose.yml
+   curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/compose.nfs.yml
+   curl -fsSL -o .env https://raw.githubusercontent.com/jurjen74/3mf-library/main/.env.example
+   ```
+
+2. **Tell it where your models are.** Open `.env` and set at least:
+
+   ```bash
+   LIBRARY_DIR=/srv/3d-prints          # the folder with your 3MF/STL files
+   TRUSTED_NETWORKS=192.168.1.0/24     # your home network: no login needed there
+   TZ=Europe/Amsterdam                 # for the dates on the site
+   ```
+
+   Models on a NAS? Use [an NFS share](/guides/nas/) instead of `LIBRARY_DIR`. Every other setting is described in
+   [Configuration](/reference/configuration/).
+
+3. **Create the data folder.** The app runs as user 1000 by default. It needs to read the library and write to
+   `./data` (the index, previews and accounts):
+
+   ```bash
+   mkdir -p data && sudo chown 1000:1000 data
+   ```
+
+   If your files belong to another user, set `PUID` and `PGID` in `.env` (see `ls -n` on the library) and use those
+   numbers here.
+
+4. **Start it.**
+
+   ```bash
+   docker compose up -d
+   docker compose logs -f     # Ctrl+C to stop watching
+   ```
+
+5. **Open the site** at `http://<this machine>:8085` and [create the first account](/start/first-account/).
+
+</Steps>
+
+The first scan reads every file once. A few hundred models take a minute or two; you can already browse while it runs.
+After that, only new and changed files are read.
+
+<Aside type="tip" title="Using it away from home">
+Don't forward port 8085 to the internet. Put the site behind a reverse proxy with HTTPS instead: see
+[Reverse proxy and HTTPS](/guides/reverse-proxy/).
+</Aside>

@@ -11,7 +11,8 @@ host names, user names, domains, MAC addresses, NAS paths) in tracked files.
 A self-hosted preview site for a folder of 3D print files (the owner's is a synced cloud folder on a NAS). It shows
 the folders exactly as on disk, previews every model, and adds file pages, search, a 3D viewer, favourites, folder ZIPs,
 "Open in <slicer>" and accounts. One ASP.NET Core container, published to GHCR; the library is mounted **read-only**
-and never written to. README.md is the guide for people installing it.
+and never written to. README.md is the short guide for people installing it; the full documentation is the `docs/` site. When behaviour or
+settings change, update both (and re-run the screenshot script when the UI changes).
 
 ## Decisions (don't re-litigate)
 
@@ -77,6 +78,9 @@ src/Library.Web/
                         `library.theme`; page-transition hooks), js/viewer.js (ES module), lib/three (three.js 0.186.1, vendored), icons/,
                         fonts/ (Inter, OFL), backgrounds/ (login photos per theme, generated with Magnific, JPEG 1920 px)
 tests/Library.Tests/    xUnit v3 (Microsoft Testing Platform); synthetic fixtures only (TestThreeMf, TestMeshes)
+docs/                   Documentation site (Astro Starlight) → www.3mf-library.com via .github/workflows/docs.yml;
+                        scripts/screenshots.mjs (Playwright) shoots src/assets/screenshots/ from a demo instance
+                        (git-ignored demo-library/ with CC-licensed models, credited in project/credits.md)
 tools/mac-opener/       macOS helper for threemflib:// links: build.sh (osacompile + URL scheme + ad-hoc sign),
                         opener.applescript, open-model.sh (decoding, checks; DRY_RUN=1 / LIBRARY_ROOT for testing)
 tools/windows-opener/   Windows helper: install.ps1 / uninstall.ps1, launch.vbs, open-model.ps1 (-DryRun -ConfigPath)

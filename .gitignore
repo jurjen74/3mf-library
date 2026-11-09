@@ -10,6 +10,10 @@ TestResults/
 /data/
 /dev-library/
 
+# Demo library and its data for the documentation screenshots (other people's models: never commit)
+/demo-library/
+/demo-data/
+
 # Secrets / local config
 .env
 .env.*

@@ -6,6 +6,12 @@
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--project", "src/Library.Web", "--launch-profile", "http"],
       "port": 5180
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "/opt/homebrew/opt/node@24/bin/npm",
+      "runtimeArgs": ["--prefix", "docs", "run", "preview", "--", "--port", "4321"],
+      "port": 4321
     }
   ]
 }

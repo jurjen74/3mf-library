@@ -1,0 +1,64 @@
+---
+title: 3MF Library
+description: A self-hosted preview site for your 3D print files. Browse, preview, search and open 3MF and STL files in your slicer, from any device.
+template: splash
+hero:
+  title: Your 3D print folder, finally with previews
+  tagline: A small self-hosted site that shows your 3MF and STL files the way they are on disk, with plate previews, photos, a 3D viewer, search and "Open in your slicer". Your files stay where they are, untouched.
+  image:
+    light: ../../assets/screenshots/hero-light.jpg
+    dark: ../../assets/screenshots/hero-dark.jpg
+    alt: The library showing a folder of Gridfinity models as cards with previews
+  actions:
+    - text: Quick start
+      link: /start/quick-start/
+      icon: right-arrow
+    - text: Take the tour
+      link: /start/tour/
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/jurjen74/3mf-library
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Why
+
+Slicers and file browsers don't show what's inside a 3MF. If your models live in folders on a NAS or in a synced cloud
+folder, finding "that box with the hinged lid" means opening files one by one. 3MF Library reads the previews the
+slicer already stored in each file and turns the folder into something you can browse, search and print from, on
+your computer and on your phone.
+
+<CardGrid>
+  <Card title="Previews from the files themselves" icon="seti:image">
+    Bambu Studio, OrcaSlicer and PrusaSlicer store plate images in every 3MF; MakerWorld downloads add photos and a
+    description. STLs and image-less 3MFs get a rendered preview.
+  </Card>
+  <Card title="Your folders, as they are" icon="open-book">
+    No importing, no tags, no database to maintain. The folder structure on disk is the organisation; the library is
+    mounted read-only.
+  </Card>
+  <Card title="A page per model" icon="document">
+    All plates, photos, description, print time, filament and colours, and a 3D viewer you can rotate on any device.
+  </Card>
+  <Card title="Find things fast" icon="magnifier">
+    Search names, titles, designers and part names; sort and filter by type; see everything in a kit at once.
+  </Card>
+  <Card title="Straight to your slicer" icon="rocket">
+    Open in Bambu Studio, OrcaSlicer, Cura and more, or have your slicer open the synced original on your own computer.
+  </Card>
+  <Card title="Made for home servers" icon="laptop">
+    One small container for amd64 and arm64. No login needed at home, accounts for everywhere else.
+  </Card>
+</CardGrid>
+
+## Get going
+
+<CardGrid>
+  <LinkCard title="Quick start" description="Running in five minutes with Docker Compose." href="/start/quick-start/" />
+  <LinkCard title="Library on a NAS" description="Mount an NFS share from Synology, TrueNAS or Unraid." href="/guides/nas/" />
+  <LinkCard title="Reverse proxy and HTTPS" description="Use it safely away from home." href="/guides/reverse-proxy/" />
+  <LinkCard title="Configuration" description="Every setting in one table." href="/reference/configuration/" />
+</CardGrid>
