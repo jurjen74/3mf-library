@@ -517,10 +517,11 @@ public static class ThreeMfMeshReader
 
         public void CountVertex()
         {
-            // A closed mesh has about half as many vertices as triangles; this only catches the absurd.
-            if (++_vertices > maxTriangles)
+            // A welded mesh has about half as many vertices as triangles, but some exporters write every triangle
+            // with its own three corners: allow that, and only catch the absurd.
+            if (++_vertices > 3L * maxTriangles)
             {
-                throw new InvalidDataException($"3MF model files hold more than {maxTriangles} vertices.");
+                throw new InvalidDataException($"3MF model files hold more than {3L * maxTriangles} vertices.");
             }
         }
 

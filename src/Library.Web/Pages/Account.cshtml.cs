@@ -9,7 +9,7 @@ namespace Library.Web.Pages;
 /// Your account: change the password (which also logs out your other devices). With a starting or reset password
 /// this is the only page you can reach until you've chosen your own.
 /// </summary>
-[EnableRateLimiting("login")]
+[EnableRateLimiting("account")]
 public sealed class AccountModel(UserStore users, ILogger<AccountModel> log) : PageModel
 {
     [BindProperty]

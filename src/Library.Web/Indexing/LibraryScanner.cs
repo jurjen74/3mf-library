@@ -50,6 +50,18 @@ public sealed class LibraryScanner(
     /// </summary>
     public static readonly TimeSpan RetryFailedAfter = TimeSpan.FromHours(1);
 
+    /// <summary>
+    /// Stored (and shown) instead of the exception text when the library folder didn't deliver a file: an I/O or
+    /// permission error, which says nothing about the file itself. Only these are retried after
+    /// <see cref="RetryFailedAfter"/>; a file that is really broken (not a ZIP, over a limit) waits until it changes.
+    /// The details, server paths included, go to the log only.
+    /// </summary>
+    public const string ReadFailedError =
+        "The library folder didn't deliver the file (a network or permission problem). It's tried again within an hour.";
+
+    private static string ErrorText(Exception ex) =>
+        ex is IOException or UnauthorizedAccessException ? ReadFailedError : ex.Message;
+
     private readonly IgnoreMatcher _ignore = new(options.Ignore);
     private readonly DescriptionSanitizer _sanitizer = new();
     private readonly Lock _gate = new();
@@ -81,7 +93,8 @@ public sealed class LibraryScanner(
 
         using var connection = db.Open();
         var existing = connection.Query<ExistingFile>(
-            "SELECT id, path, size, mtime, indexer_version, cache_key, error IS NOT NULL AS failed, indexed_at FROM files")
+            "SELECT id, path, size, mtime, indexer_version, cache_key, error = @ReadFailedError AS read_failed_flag, indexed_at FROM files",
+            new { ReadFailedError })
             .ToDictionary(f => f.Path, StringComparer.Ordinal);
 
         var retryBefore = _clock.GetUtcNow().Subtract(RetryFailedAfter).ToUnixTimeMilliseconds();
@@ -90,7 +103,7 @@ public sealed class LibraryScanner(
                 previous.Size != file.Size ||
                 previous.Mtime != file.Mtime ||
                 previous.IndexerVersion != IndexerVersion ||
-                (previous.HasFailed && previous.IndexedAt <= retryBefore))
+                (previous.ReadFailed && previous.IndexedAt <= retryBefore))
             .ToList();
 
         var (settled, deferred) = Settle(changed, cancellationToken);
@@ -243,9 +256,9 @@ public sealed class LibraryScanner(
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // One damaged or half-synced file must not stop the scan; it gets another try when it changes, or
-                // after RetryFailedAfter.
+                // after RetryFailedAfter when the folder didn't deliver it.
                 log.LogWarning("Could not read {Path}: {Message}", file.Path, ex.Message);
-                record.Error = ex.Message;
+                record.Error = ErrorText(ex);
                 record.CacheKey = null;
                 record.Cover = record.CoverSmall = null;
                 record.PlateCount = record.PhotoCount = 0;
@@ -262,7 +275,7 @@ public sealed class LibraryScanner(
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 log.LogWarning("Could not read {Path}: {Message}", file.Path, ex.Message);
-                record.Error = ex.Message;
+                record.Error = ErrorText(ex);
                 record.CacheKey = null;
                 record.Cover = record.CoverSmall = null;
             }
@@ -573,10 +586,11 @@ public sealed class LibraryScanner(
         public long Mtime { get; init; }
         public long IndexerVersion { get; init; }
         public string? CacheKey { get; init; }
-        public long Failed { get; init; }
+        /// <summary>1 when the last read failed with <see cref="ReadFailedError"/> (SQLite: NULL when it didn't fail).</summary>
+        public long? ReadFailedFlag { get; init; }
         public long IndexedAt { get; init; }
 
-        public bool HasFailed => Failed != 0;
+        public bool ReadFailed => ReadFailedFlag == 1;
     }
 
     private sealed class FileRecord

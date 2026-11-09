@@ -105,7 +105,13 @@ public sealed partial class MeshService(
                 name, file.Path, mesh.TriangleCount, simplified.TriangleCount, (DateTime.UtcNow - started).TotalSeconds);
             return new MeshResult(target, null);
         }
-        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or System.Xml.XmlException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The message would name server paths; the viewer gets a general one, the log the details.
+            log.LogWarning("Could not build viewer mesh {Name} for {Path}: {Message}", name, file.Path, ex.Message);
+            return new MeshResult(null, "The library folder didn't deliver the file. Try again in a moment.");
+        }
+        catch (Exception ex) when (ex is InvalidDataException or System.Xml.XmlException)
         {
             log.LogWarning("Could not build viewer mesh {Name} for {Path}: {Message}", name, file.Path, ex.Message);
             return new MeshResult(null, ex.Message);

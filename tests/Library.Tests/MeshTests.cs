@@ -151,6 +151,30 @@ public class MeshTests
     }
 
     [Fact]
+    public void Accepts_unwelded_triangles_with_three_corners_each()
+    {
+        // Two triangles that don't share corners: 6 vertices for 2 triangles, as some exporters write them.
+        using var zip = TestThreeMf.Open(TestThreeMf.Build(new Dictionary<string, object>
+        {
+            ["3D/3dmodel.model"] = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+                 <resources><object id="1" type="model"><mesh>
+                  <vertices>
+                   <vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/>
+                   <vertex x="2" y="0" z="0"/><vertex x="3" y="0" z="0"/><vertex x="2" y="1" z="0"/>
+                  </vertices>
+                  <triangles><triangle v1="0" v2="1" v3="2"/><triangle v1="3" v2="4" v3="5"/></triangles>
+                 </mesh></object></resources>
+                 <build><item objectid="1"/></build>
+                </model>
+                """,
+        }));
+
+        Assert.Equal(2, ThreeMfMeshReader.Read(zip, plate: null, maxTriangles: 2).TriangleCount);
+    }
+
+    [Fact]
     public void Ignores_filament_colours_that_are_not_strings()
     {
         var bytes = TestThreeMf.Rewrite(TestMeshes.BambuThreeMf(), "Metadata/project_settings.config",

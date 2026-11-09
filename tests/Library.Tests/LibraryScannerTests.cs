@@ -275,6 +275,7 @@ public sealed class LibraryScannerTests : IDisposable
         File.SetUnixFileMode(path, UnixFileMode.None);
         Assert.Equal(1, scanner.Scan(CancellationToken.None).Errors);
         File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        Assert.Equal(LibraryScanner.ReadFailedError, _queries.FindFile("Lamp.3mf")!.Error); // no server path
 
         clock.Advance(TimeSpan.FromMinutes(30));
         Assert.Equal(0, scanner.Scan(CancellationToken.None).Indexed);
@@ -289,6 +290,23 @@ public sealed class LibraryScannerTests : IDisposable
 
         // A file that reads fine isn't read again.
         clock.Advance(LibraryScanner.RetryFailedAfter * 2);
+        Assert.Equal(0, scanner.Scan(CancellationToken.None).Indexed);
+    }
+
+    [Fact]
+    public void A_file_that_is_really_broken_waits_until_it_changes()
+    {
+        Write("Broken.3mf", "this is not a ZIP"u8.ToArray());
+        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var scanner = new LibraryScanner(_options, new LibraryDb(_options), new LibraryPaths(_options),
+            NullLogger<LibraryScanner>.Instance, clock: clock);
+
+        Assert.Equal(1, scanner.Scan(CancellationToken.None).Errors);
+        var error = _queries.FindFile("Broken.3mf")!.Error;
+        Assert.NotNull(error);
+        Assert.NotEqual(LibraryScanner.ReadFailedError, error);
+
+        clock.Advance(LibraryScanner.RetryFailedAfter * 3);
         Assert.Equal(0, scanner.Scan(CancellationToken.None).Indexed);
     }
 

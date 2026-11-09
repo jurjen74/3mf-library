@@ -84,8 +84,9 @@ in the repo — tests build synthetic 3MF/STL in code.
 
 - `library.db` — the **index, a cache**. `LibraryDb.SchemaVersion` bump ⇒ drop and rebuild everything (fine).
   `LibraryScanner.IndexerVersion` bump ⇒ every file re-read once (cache keys include it). Search: FTS5 `files_fts`.
-  Files whose read failed (`files.error`) are retried hourly (`RetryFailedAfter`), since the soft NFS mount can fail
-  a read that works later.
+  Files the library folder didn't deliver (I/O or permission error, stored as `LibraryScanner.ReadFailedError`, no
+  server path) are retried hourly (`RetryFailedAfter`), since the soft NFS mount can fail; files that are really
+  broken (not a ZIP, over a limit) keep their own message and wait until they change.
 - `cache/<key>/` — extracted previews, renders, viewer meshes (`mesh_*.bin.gz`). Key = hash(path, size, mtime,
   indexer version), so URLs are immutable; orphaned folders are removed after each complete scan.
 - `users.db` — accounts and favourites. **Never dropped**: `UserStore.Migrate` runs numbered steps in place
@@ -101,7 +102,8 @@ in the repo — tests build synthetic 3MF/STL in code.
 - `KNOWN_PROXIES`: `UseForwardedHeaders` only runs when it's set (an empty list would trust everyone's X-Forwarded-For).
 - First account only via setup from the home network, never through the proxy. Admin rights checked in the DB per
   request (not in the cookie). Security stamp in the cookie; password change/reset ends other sessions.
-- Login/setup/account POSTs are rate-limited per client IP. Previews/meshes are `Cache-Control: private`.
+- Login/setup POSTs are rate-limited per client IP, password changes (`account` policy) per account; the rate
+  limiter runs after authentication for that. Previews/meshes are `Cache-Control: private`.
 
 ## Environment and infrastructure
 

@@ -220,11 +220,11 @@ second build of the same mesh.
 
 ## Info / nice to have
 
-- **Shared rate-limit budget.** `Account` uses the `login` policy (`Account.cshtml.cs:12`), so password-change attempts
+- ✅ **Shared rate-limit budget** (fixed in the follow-up below). `Account` uses the `login` policy (`Account.cshtml.cs:12`), so password-change attempts
   and logins share the same 8 per 5 minutes per IP. Behind the proxy, a household or mobile carrier shares one public
   IP, so a few mistyped current passwords can block someone else's login for 5 minutes. A separate `account` policy
   is cleaner.
-- **Server paths in error text.** `IOException` messages (e.g. "Could not find file '/library/…'") end up in
+- ✅ **Server paths in error text** (fixed in the follow-up below). `IOException` messages (e.g. "Could not find file '/library/…'") end up in
   `files.error` (shown on cards and the file page) and in the `/mesh` problem detail. They're only visible to logged-in
   users and only show container paths, but a generic message plus the details in the log would be tidier.
 - **Query cost per page.** `Browse` runs `Folders()` (one correlated `COUNT` per folder) and one `CoversUnder` per
@@ -268,5 +268,25 @@ second build of the same mesh.
 
 ## Test gaps worth filling
 
-All the gaps listed for findings 2–11 now have tests (166 tests in total). Still untested: the site.js fixes
+All the gaps listed for findings 2–11 now have tests (169 tests in total, with the follow-up). Still untested: the site.js fixes
 (findings 5 and 6, checked by hand in the browser) and the `TZ` setting (finding 9, deployment).
+
+## Follow-up: check of the fixes (2026-11-09)
+
+The fixes in `fff7436` and `f19eacd` were read against the findings above; they are correct and all tests passed.
+Two details were adjusted, and two info items fixed:
+
+- **Vertex budget (finding 11).** `ParseBudget` counted vertices against the triangle limit. A 3MF that writes every
+  triangle with its own three corners (unwelded, as some exporters do) has three vertices per triangle, so it was
+  refused from a third of the limit. Now three vertices per triangle are allowed. Test:
+  `Accepts_unwelded_triangles_with_three_corners_each`.
+- **Retries (finding 3).** Every failed file was read again each hour, including files that are broken for good (not a
+  ZIP, over a triangle limit), and a large one held the mesh gate each time. Now only files the library folder didn't
+  deliver (`IOException`, `UnauthorizedAccessException`) are retried; they are stored with the fixed
+  `LibraryScanner.ReadFailedError`. Other errors keep their message and wait until the file changes. Test:
+  `A_file_that_is_really_broken_waits_until_it_changes`.
+- **Server paths in error text (info).** I/O errors are stored and shown as `ReadFailedError`; the viewer says "The
+  library folder didn't deliver the file. Try again in a moment." The details, paths included, stay in the log.
+- **Rate limits (info).** Password changes have their own `account` policy, partitioned per signed-in account (per
+  IP only without one), so people sharing a public address don't use up each other's logins. `UseRateLimiter` now runs
+  after authentication. Test: `Password_change_attempts_are_limited_per_account_not_per_address`.

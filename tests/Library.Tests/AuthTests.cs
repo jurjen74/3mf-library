@@ -256,6 +256,38 @@ public sealed partial class AuthTests : IDisposable
     }
 
     [Fact]
+    public async Task Password_change_attempts_are_limited_per_account_not_per_address()
+    {
+        var (jurjen, users) = Site();
+        users.Create("guest", "guest password 123", isAdmin: false);
+        var guest = NewClient(LastFactory);
+        await LogIn(jurjen, "jurjen", Password);
+        await LogIn(guest, "guest", "guest password 123");
+
+        async Task<HttpStatusCode> WrongCurrentPassword(HttpClient client)
+        {
+            var account = await (await Send(client, "/account", peer: Outside)).Content.ReadAsStringAsync();
+            var response = await Post(client, "/account", Outside,
+            [
+                new("CurrentPassword", "guessing"), new("NewPassword", "a brand new password"), new("RepeatPassword", "a brand new password"),
+                new("__RequestVerificationToken", Token(account)),
+            ]);
+            return response.StatusCode;
+        }
+
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 9; i++)
+        {
+            statuses.Add(await WrongCurrentPassword(jurjen));
+        }
+
+        // Same address: the other account can still change its password, and logins aren't affected.
+        Assert.Equal(HttpStatusCode.TooManyRequests, statuses[^1]);
+        Assert.Equal(HttpStatusCode.OK, await WrongCurrentPassword(guest));
+        Assert.Equal(HttpStatusCode.Redirect, (await LogIn(NewClient(LastFactory), "guest", "guest password 123")).StatusCode);
+    }
+
+    [Fact]
     public async Task Changing_the_password_needs_the_current_one()
     {
         var (client, users) = Site();

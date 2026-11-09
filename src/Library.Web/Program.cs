@@ -70,10 +70,19 @@ builder.Services.AddRateLimiter(limiter =>
         ? RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions { PermitLimit = 8, Window = TimeSpan.FromMinutes(5), QueueLimit = 0 })
         : RateLimitPartition.GetNoLimiter("read"));
+    // Password changes count per account, not per address: people behind one connection (a household, a mobile
+    // carrier) don't use up each other's logins, and guessing the current password stays limited per account.
+    limiter.AddPolicy("account", context => HttpMethods.IsPost(context.Request.Method)
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            Session.UserId(context.User) is { } userId
+                ? $"user:{userId}"
+                : $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 8, Window = TimeSpan.FromMinutes(5), QueueLimit = 0 })
+        : RateLimitPartition.GetNoLimiter("read"));
     limiter.OnRejected = async (rejected, cancellationToken) =>
     {
         rejected.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
-        await rejected.HttpContext.Response.WriteAsync("Too many login attempts. Try again in a few minutes.", cancellationToken);
+        await rejected.HttpContext.Response.WriteAsync("Too many attempts. Try again in a few minutes.", cancellationToken);
     };
 });
 
@@ -138,13 +147,14 @@ app.Use(async (context, next) =>
 });
 
 app.UseRouting();
-app.UseRateLimiter();
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {
     TrustedNetwork.SignInIfTrusted(context, options);
     await next();
 });
+// After authentication, so the "account" policy knows who is signed in.
+app.UseRateLimiter();
 app.Use(Session.RequirePasswordChange);
 app.UseAuthorization();
 
