@@ -15,7 +15,8 @@ RUN dotnet publish src/Library.Web/Library.Web.csproj -c Release -a $TARGETARCH 
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 LABEL org.opencontainers.image.title="3MF Library" \
-      org.opencontainers.image.description="Self-hosted preview site for a folder of 3D print files (3MF, STL)"
+      org.opencontainers.image.description="Self-hosted preview site for a folder of 3D print files (3MF, STL)" \
+      org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 COPY --from=build /app .
 

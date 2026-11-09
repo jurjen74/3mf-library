@@ -165,7 +165,8 @@ Razor views are compiled at build time: restart `dotnet run` after editing `.csh
 
 ## Open items
 
-- Licence: none yet (needed before others may use it); then make the repository and the GHCR package public.
+- Making the repository and the GHCR package public (licence: MIT, `LICENSE`; the Magnific login backgrounds are
+  excluded from it until the owner has checked Magnific's terms, see README → License).
 - Before going public: the git history still contains the owner's infrastructure details (removed from the files);
   consider publishing a fresh repository without that history.
 - Optional: share links (signed, expiring, scoped), OIDC / forward-auth login, a no-login mode, a container health

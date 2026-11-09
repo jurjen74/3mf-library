@@ -181,3 +181,13 @@ docker build --platform linux/amd64 -t 3mf-library:local .
 
 Then set `IMAGE=3mf-library:local` and `PULL_POLICY=never` in `.env`. `compose.dev.yml` runs a local build against
 `dev-library/`. Architecture, decisions and conventions are in [CLAUDE.md](CLAUDE.md).
+
+## License
+
+[MIT](LICENSE), © Jurjen Ladenius. Included third-party parts keep their own licences:
+
+- `src/Library.Web/wwwroot/lib/three/`: [three.js](https://threejs.org), MIT (`LICENSE` in that folder).
+- `src/Library.Web/wwwroot/fonts/`: [Inter](https://rsms.me/inter/), SIL Open Font License 1.1 (`Inter-OFL.txt`).
+- NuGet packages: Dapper (Apache 2.0), HtmlSanitizer (MIT), Microsoft.Data.Sqlite (MIT).
+- `src/Library.Web/wwwroot/backgrounds/`: login backgrounds generated with Magnific; they are **not** covered by the
+  MIT licence. Replace them with your own images if you redistribute the site.
