@@ -34,7 +34,8 @@ including your phone.
 - A machine that runs Docker with Compose: a home server, a NAS that runs containers, a Raspberry Pi 4/5, a small VM.
   Images are published for **amd64** and **arm64**.
 - Your models in a folder that machine can read: a local folder, or an NFS share from a NAS.
-- About 1 GB of memory for normal use. Opening very large models in the 3D viewer temporarily needs more; the
+- A few hundred MB of memory for normal use. Opening very large models in the 3D viewer temporarily needs more; the
   container is capped at 3 GB by default.
 
-Ready? Continue with the [quick start](/start/quick-start/).
+Ready? Continue with the [quick start](/start/quick-start/), or pick the [installation guide for your
+system](/install/overview/).

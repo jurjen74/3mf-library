@@ -1,0 +1,70 @@
+---
+title: TrueNAS SCALE
+description: Install 3MF Library on TrueNAS SCALE 24.10 or newer as a custom app from YAML.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+TrueNAS SCALE 24.10 ("Electric Eel") and newer run apps with Docker, and can install any Docker Compose file as a
+**custom app**.
+
+<Steps>
+
+1. **Datasets.** You probably have a dataset with your models already, for example `tank/3d-prints`
+   (`/mnt/tank/3d-prints`). Create one for the site's data, for example `tank/apps/3mf-library`
+   (`/mnt/tank/apps/3mf-library`).
+
+2. **Permissions.** Apps run as the built-in **apps** user (UID and GID `568`). Give it:
+   - **read** access to the models dataset (Datasets → the dataset → Permissions → Edit → add an entry for user
+     `apps`, Read);
+   - **full** access to the data dataset (owner `apps`, group `apps`).
+
+3. **Install via YAML.** Apps → **Discover Apps** → the **⋮** menu → **Install via YAML**. Name: `3mf-library`.
+   Paste, with your own values in the marked lines:
+
+   ```yaml
+   services:
+     3mf-library:
+       image: ghcr.io/jurjen74/3mf-library:latest
+       user: "568:568"
+       ports:
+         - "8085:8080"
+       environment:
+         TZ: Europe/Amsterdam                     # ← your time zone
+         TRUSTED_NETWORKS: 192.168.1.0/24         # ← your home network
+       volumes:
+         - /mnt/tank/3d-prints:/library:ro        # ← your models dataset
+         - /mnt/tank/apps/3mf-library:/data       # ← the data dataset
+       restart: unless-stopped
+       mem_limit: 3g
+       security_opt:
+         - no-new-privileges:true
+       cap_drop:
+         - ALL
+       read_only: true
+       tmpfs:
+         - /tmp
+   ```
+
+   **Save.** The app shows as *Deploying*, then *Running*.
+
+4. **Check the logs:** Apps → `3mf-library` → **Logs**: look for `Scan finished … files in … folders`.
+
+5. **Open** `http://<TrueNAS address>:8085` and [create the first account](/start/first-account/).
+
+</Steps>
+
+<Aside type="caution">
+Port 8085 must not be in use by another app or by the TrueNAS web interface. Pick another host port (e.g.
+`"8090:8080"`) if needed.
+</Aside>
+
+## Updating
+
+Apps → `3mf-library` → **Edit** → **Save** pulls the image again when it uses `latest`. Pin a version (for example
+`ghcr.io/jurjen74/3mf-library:1.0.0`) to update deliberately: change the tag and save.
+
+## HTTPS
+
+Use a reverse proxy app (Nginx Proxy Manager, Caddy, Traefik) and add `KNOWN_PROXIES: <its address>` under
+`environment`. See [Reverse proxy and HTTPS](/guides/reverse-proxy/).

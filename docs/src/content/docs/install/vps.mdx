@@ -1,0 +1,146 @@
+---
+title: VPS with HTTPS
+description: Run 3MF Library on a rented server on the internet, with Caddy for automatic HTTPS and your models synced to it.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+No server at home? A small rented server (VPS) works too. The site is then on the internet from the start, so this
+guide puts **Caddy** in front of it for automatic HTTPS, and everyone logs in.
+
+<Aside type="caution" title="Your files on someone else's server">
+Your models are copied to the VPS provider's machine. That's usually fine for downloaded models; keep it in mind for
+designs you don't want to leave home.
+</Aside>
+
+## What you need
+
+- A VPS with **2 GB of memory** (1 vCPU is enough), Ubuntu 24.04 or Debian 13, and SSH access.
+- A **domain name** (or subdomain) for the site, for example `models.example.com`.
+- A way to get your models onto the server (step 4).
+
+<Steps>
+
+1. **Point your domain at the server.** At your DNS provider, create an `A` record for `models.example.com` with the
+   VPS's IP address (and an `AAAA` record for its IPv6 address, if it has one). If your DNS is at Cloudflare, set it
+   to **DNS only**, so Caddy can get its certificate.
+
+2. **Install Docker** with Docker's guide for [Ubuntu](https://docs.docker.com/engine/install/ubuntu/) or
+   [Debian](https://docs.docker.com/engine/install/debian/).
+
+3. **Open only SSH, HTTP and HTTPS** in the firewall:
+
+   ```bash
+   sudo ufw allow OpenSSH
+   sudo ufw allow 80,443/tcp
+   sudo ufw enable
+   ```
+
+   Port 8085 stays closed: the site is only reachable through Caddy (step 5 binds it to the server itself).
+
+4. **Put your models on the server**, for example in `/srv/3d-prints`. Pick what fits where they are now:
+   - **A cloud folder** (OneDrive, Google Drive, Dropbox …): [rclone](https://rclone.org) can copy it, every 15 minutes
+     with a cron job: `rclone sync "onedrive:3D Print" /srv/3d-prints`.
+   - **Your computers:** [Syncthing](https://syncthing.net) keeps a folder in sync between your PC and the server.
+   - **Once, by hand:** `rsync -a ~/3D\ Print/ user@vps:/srv/3d-prints/`.
+
+5. **Get the site's files and settings:**
+
+   ```bash
+   sudo mkdir -p /opt/3mf-library && sudo chown $USER /opt/3mf-library && cd /opt/3mf-library
+   curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/docker-compose.yml
+   curl -fsSL -o .env https://raw.githubusercontent.com/jurjen74/3mf-library/main/.env.example
+   mkdir -p data && sudo chown 1000:1000 data
+   ```
+
+   In `.env`:
+
+   ```bash
+   LIBRARY_DIR=/srv/3d-prints
+   PORT=127.0.0.1:8085          # only reachable on the server itself
+   TRUSTED_NETWORKS=            # no home network here: everyone logs in
+   KNOWN_PROXIES=172.30.0.2     # Caddy, see the next step
+   TZ=Europe/Amsterdam
+   ```
+
+6. **Add Caddy.** Create `docker-compose.override.yml` next to the other file (Docker Compose reads it
+   automatically):
+
+   ```yaml
+   services:
+     3mf-library:
+       networks: [web]
+
+     caddy:
+       image: caddy:2
+       restart: unless-stopped
+       ports:
+         - "80:80"
+         - "443:443"
+         - "443:443/udp"
+       volumes:
+         - ./Caddyfile:/etc/caddy/Caddyfile:ro
+         - caddy-data:/data
+         - caddy-config:/config
+       networks:
+         web:
+           ipv4_address: 172.30.0.2
+
+   networks:
+     web:
+       ipam:
+         config:
+           - subnet: 172.30.0.0/24
+
+   volumes:
+     caddy-data:
+     caddy-config:
+   ```
+
+   And a file `Caddyfile` with your domain:
+
+   ```text
+   models.example.com {
+       reverse_proxy 3mf-library:8080
+   }
+   ```
+
+7. **Start everything:**
+
+   ```bash
+   docker compose up -d
+   docker compose logs -f caddy      # wait for "certificate obtained successfully"
+   ```
+
+8. **Create the first account.** That can't be done through a proxy, so open the site directly through an SSH tunnel.
+   On your own computer:
+
+   ```bash
+   ssh -L 8085:127.0.0.1:8085 user@vps
+   ```
+
+   Open `http://localhost:8085`, and enter the setup code from the log (in the SSH session):
+
+   ```bash
+   docker logs 3mf-library | grep "setup code"
+   ```
+
+   Close the tunnel afterwards. From now on, use `https://models.example.com` and log in.
+
+</Steps>
+
+## Updating
+
+```bash
+cd /opt/3mf-library && docker compose pull && docker compose up -d && docker image prune -f
+```
+
+This updates Caddy as well.
+
+## Good to know
+
+- **Everyone logs in.** Without `TRUSTED_NETWORKS` there's no "home network"; failed logins are rate-limited per
+  visitor (Caddy passes the real address, because `KNOWN_PROXIES` points at it).
+- **Backups:** `data/users.db` holds the accounts; see [Updating and backups](/guides/updating/).
+- **Already running a reverse proxy** on the server? Skip Caddy, publish the site to that proxy and set
+  `KNOWN_PROXIES` to its address ([Reverse proxy and HTTPS](/guides/reverse-proxy/)).

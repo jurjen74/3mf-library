@@ -1,0 +1,88 @@
+---
+title: Portainer
+description: Deploy 3MF Library as a Portainer stack.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+In Portainer the site is a **stack**: a Docker Compose file you paste into Portainer.
+
+<Aside type="caution" title="Use full paths">
+Portainer runs stacks from its own folder, so relative paths like `./data` end up somewhere inside Portainer. Use full
+paths on the host for both the models and the data.
+</Aside>
+
+<Steps>
+
+1. **On the host,** create the data folder for the user the site runs as:
+
+   ```bash
+   sudo mkdir -p /opt/3mf-library/data && sudo chown 1000:1000 /opt/3mf-library/data
+   ```
+
+2. **Portainer → Stacks → Add stack.** Name: `3mf-library`. Build method: **Web editor**. Paste:
+
+   ```yaml
+   services:
+     3mf-library:
+       image: ghcr.io/jurjen74/3mf-library:${IMAGE_TAG:-latest}
+       container_name: 3mf-library
+       user: "${PUID:-1000}:${PGID:-1000}"
+       ports:
+         - "${PORT:-8085}:8080"
+       environment:
+         TZ: ${TZ:-UTC}
+         TRUSTED_NETWORKS: ${TRUSTED_NETWORKS:-}
+         KNOWN_PROXIES: ${KNOWN_PROXIES:-}
+       volumes:
+         - ${LIBRARY_DIR}:/library:ro
+         - /opt/3mf-library/data:/data
+       restart: unless-stopped
+       mem_limit: ${MEMORY_LIMIT:-3g}
+       security_opt:
+         - no-new-privileges:true
+       cap_drop:
+         - ALL
+       read_only: true
+       tmpfs:
+         - /tmp
+   ```
+
+3. **Environment variables** (below the editor, *Add an environment variable*):
+
+   | Name | Value |
+   |---|---|
+   | `LIBRARY_DIR` | `/srv/3d-prints` (your models folder on the host) |
+   | `TRUSTED_NETWORKS` | `192.168.1.0/24` |
+   | `TZ` | `Europe/Amsterdam` |
+   | `PUID` / `PGID` | only if the models belong to another user than 1000 |
+
+4. **Deploy the stack.** The container's logs show `Scan finished … files in … folders` when it's ready.
+
+5. **Open** `http://<host>:8085` and [create the first account](/start/first-account/).
+
+</Steps>
+
+## Models on an NFS share
+
+Add the NFS volume to the stack instead of `LIBRARY_DIR`:
+
+```yaml
+services:
+  3mf-library:
+    volumes:
+      - library:/library:ro
+      - /opt/3mf-library/data:/data
+
+volumes:
+  library:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=192.168.1.10,nfsvers=4.1,ro,soft,timeo=100"
+      device: ":/volume1/3d-models"
+```
+
+## Updating
+
+Stacks → `3mf-library` → **Update the stack** with **Re-pull image and redeploy** switched on.

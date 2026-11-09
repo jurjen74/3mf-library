@@ -1,0 +1,110 @@
+---
+title: Docker Compose on Linux
+description: Step-by-step installation on a Linux server or PC (Debian, Ubuntu, Fedora and others) with Docker Compose.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+This is the reference setup: Docker Compose on any Linux machine. The commands are for Debian and Ubuntu; on other
+distributions only the Docker installation differs.
+
+<Steps>
+
+1. **Install Docker.** Follow Docker's own guide for your distribution, which also installs the Compose plugin:
+   [Debian](https://docs.docker.com/engine/install/debian/), [Ubuntu](https://docs.docker.com/engine/install/ubuntu/),
+   [Fedora](https://docs.docker.com/engine/install/fedora/). Then check:
+
+   ```bash
+   docker compose version
+   ```
+
+   Optional, so you don't need `sudo` for every Docker command: `sudo usermod -aG docker $USER`, then log out and in.
+
+2. **Make a folder for the site and download the files.**
+
+   ```bash
+   sudo mkdir -p /opt/3mf-library && sudo chown $USER /opt/3mf-library
+   cd /opt/3mf-library
+   curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/docker-compose.yml
+   curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/compose.nfs.yml
+   curl -fsSL -o .env https://raw.githubusercontent.com/jurjen74/3mf-library/main/.env.example
+   ```
+
+   You can also `git clone https://github.com/jurjen74/3mf-library.git` and use the files from the clone.
+
+3. **Find out who owns your models.** The container runs as one user, which must be able to read them:
+
+   ```bash
+   ls -ln /srv/3d-prints | head      # columns 3 and 4: user id and group id
+   id                                 # your own user id and group id
+   ```
+
+4. **Edit `.env`.** At least:
+
+   ```bash
+   LIBRARY_DIR=/srv/3d-prints
+   PUID=1000                          # from step 3
+   PGID=1000
+   TRUSTED_NETWORKS=192.168.1.0/24    # your home network; empty = everyone logs in
+   TZ=Europe/Amsterdam
+   ```
+
+   Models on a NAS? Leave `LIBRARY_DIR` and set up [NFS](/guides/nas/) instead. All settings:
+   [Configuration](/reference/configuration/).
+
+5. **Create the data folder** for that user:
+
+   ```bash
+   mkdir -p data && sudo chown 1000:1000 data     # your PUID:PGID
+   ```
+
+6. **Start it** and watch the first scan:
+
+   ```bash
+   docker compose up -d
+   docker compose logs -f
+   ```
+
+   A line like `Scan finished in 42.0s: 812 files in 96 folders` means it's done. `Ctrl+C` stops watching, not the site.
+
+7. **Open the site** at `http://<server address>:8085` and [create the first account](/start/first-account/).
+
+</Steps>
+
+## Firewall
+
+If the machine runs a firewall, allow port 8085 from your home network only. With `ufw`:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 8085 proto tcp
+```
+
+Docker's published ports bypass `ufw` rules on many systems. To be safe, don't forward 8085 on your router, and use a
+[reverse proxy](/guides/reverse-proxy/) for access from outside.
+
+## It starts by itself
+
+`restart: unless-stopped` brings the container back after a reboot, as long as Docker itself starts at boot (it does
+by default; `sudo systemctl enable docker` to be sure).
+
+## Everyday commands
+
+```bash
+cd /opt/3mf-library
+docker compose logs --tail 50        # what's going on
+docker compose pull && docker compose up -d && docker image prune -f    # update
+docker compose restart               # after changing .env: use "up -d" instead
+docker compose down                  # stop and remove the container (data stays)
+```
+
+<Aside type="caution" title="Changing .env">
+After editing `.env`, run `docker compose up -d` (not `restart`): only `up` applies the new settings.
+</Aside>
+
+## Uninstall
+
+```bash
+cd /opt/3mf-library && docker compose down
+docker image rm ghcr.io/jurjen74/3mf-library:latest
+sudo rm -rf /opt/3mf-library          # removes accounts and previews; your models are untouched
+```

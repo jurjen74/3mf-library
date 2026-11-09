@@ -27,6 +27,20 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Installation',
+          items: [
+            { label: 'Choose your setup', slug: 'install/overview' },
+            { label: 'Docker Compose on Linux', slug: 'install/linux' },
+            { label: 'Synology', slug: 'install/synology' },
+            { label: 'Unraid', slug: 'install/unraid' },
+            { label: 'TrueNAS SCALE', slug: 'install/truenas' },
+            { label: 'Raspberry Pi', slug: 'install/raspberry-pi' },
+            { label: 'Proxmox', slug: 'install/proxmox' },
+            { label: 'Portainer', slug: 'install/portainer' },
+            { label: 'VPS with HTTPS', slug: 'install/vps' },
+          ],
+        },
+        {
           label: 'Guides',
           items: [
             { label: 'Library on a NAS', slug: 'guides/nas' },

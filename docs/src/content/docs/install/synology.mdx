@@ -1,0 +1,116 @@
+---
+title: Synology
+description: Install 3MF Library on a Synology NAS with Container Manager (DSM 7.2 or newer), reading models from a shared folder.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+On a Synology NAS the models are usually already there, in a shared folder. The site runs next to them in
+**Container Manager** and reads that folder directly.
+
+You need **DSM 7.2 or newer** and a model that supports Container Manager (most "+" models and several others; see
+Synology's compatibility list).
+
+<Steps>
+
+1. **Install Container Manager** from the Package Center.
+
+2. **Make the folders.** In File Station:
+   - The models: an existing shared folder, for example `3d-prints` (`/volume1/3d-prints`).
+   - For the site: `docker/3mf-library` (Container Manager creates the `docker` shared folder), with an empty folder
+     `data` inside: `/volume1/docker/3mf-library/data`.
+
+3. **Pick the user the site runs as, and find its numbers.** Use your own DSM account or create one (for example
+   `3mflibrary`) with **read-only** access to the models folder and **read/write** access to `docker`. Then find its
+   user and group id: enable SSH (Control Panel → Terminal & SNMP), log in and run:
+
+   ```bash
+   id 3mflibrary
+   ```
+
+   ```text
+   uid=1027(3mflibrary) gid=100(users) groups=100(users)
+   ```
+
+   Here that's `1027:100`. (The first user created on a Synology usually has 1026; the `users` group is 100.)
+
+4. **Create the project.** Container Manager → **Project** → **Create**:
+   - *Project name:* `3mf-library`
+   - *Path:* `/docker/3mf-library`
+   - *Source:* **Create docker-compose.yml**, and paste this, with your own values in the four marked lines:
+
+   ```yaml
+   services:
+     3mf-library:
+       image: ghcr.io/jurjen74/3mf-library:latest
+       container_name: 3mf-library
+       user: "1027:100"                          # ← from step 3
+       ports:
+         - "8085:8080"
+       environment:
+         TZ: Europe/Amsterdam                    # ← your time zone
+         TRUSTED_NETWORKS: 192.168.1.0/24        # ← your home network
+         KNOWN_PROXIES: ""
+       volumes:
+         - /volume1/3d-prints:/library:ro        # ← your models folder
+         - ./data:/data
+       restart: unless-stopped
+       mem_limit: 3g
+       security_opt:
+         - no-new-privileges:true
+       cap_drop:
+         - ALL
+       read_only: true
+       tmpfs:
+         - /tmp
+   ```
+
+   Skip the "Web portal" step, then **Done**. Container Manager downloads the image and starts the site.
+
+5. **Check that it runs.** Container Manager → **Container** → `3mf-library` → **Log** should show
+   `Scan finished … files in … folders`.
+
+6. **Open** `http://<NAS address>:8085` from your home network and [create the first account](/start/first-account/).
+
+</Steps>
+
+<Aside type="tip" title="The models folder">
+`@eaDir`, `#recycle` and `#snapshot` folders are skipped automatically. Hide other folders with `IGNORE` (see
+[Configuration](/reference/configuration/)).
+</Aside>
+
+## HTTPS with DSM's reverse proxy
+
+DSM has a reverse proxy built in, so you don't need a separate one:
+
+1. Get a certificate for your domain: Control Panel → **Security** → **Certificate** → Add → Let's Encrypt.
+2. Control Panel → **Login Portal** → **Advanced** → **Reverse Proxy** → **Create**:
+   - *Source:* HTTPS, hostname `models.example.com`, port 443
+   - *Destination:* HTTP, `localhost`, port `8085`
+3. Pick the certificate for that hostname under **Security** → **Certificate** → **Settings**.
+4. Tell the site where the proxy is. DSM's proxy reaches the container through Docker's network gateway; find it over
+   SSH:
+
+   ```bash
+   sudo docker network inspect 3mf-library_default --format '{{(index .IPAM.Config 0).Gateway}}'
+   ```
+
+   Put that address (for example `172.20.0.1`) in `KNOWN_PROXIES`: Container Manager → **Project** → `3mf-library` →
+   **YAML Configurations**, edit, save, and let it rebuild the project when it asks.
+5. Forward port 443 on your router to the NAS (not 8085). See [Reverse proxy and HTTPS](/guides/reverse-proxy/) for
+   how logins work through a proxy.
+
+<Aside type="caution">
+If visitors on your home network suddenly need to log in after step 4, the NAS passes their connections through the
+same gateway. That's safe, just less convenient: everyone logs in, also at home.
+</Aside>
+
+## Updating
+
+The dependable way is over SSH:
+
+```bash
+cd /volume1/docker/3mf-library && sudo docker-compose pull && sudo docker-compose up -d
+```
+
+Recent Container Manager versions also show an **Update** on the **Image** tab when a newer `latest` exists.

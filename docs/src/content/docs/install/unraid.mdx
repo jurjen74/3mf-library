@@ -1,0 +1,68 @@
+---
+title: Unraid
+description: Install 3MF Library on Unraid from the Docker tab, with your models on a user share.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+On Unraid the site runs as a normal Docker container, added by hand from the **Docker** tab. Your models stay on a
+user share; the site only reads them.
+
+<Steps>
+
+1. **Make sure Docker is enabled:** Settings → Docker → *Enable Docker: Yes*.
+
+2. **Know your paths.** For example:
+   - Models: the share `3d-prints` → `/mnt/user/3d-prints`
+   - Site data: `/mnt/user/appdata/3mf-library` (created automatically)
+
+3. **Add the container.** Docker tab → **Add Container**, switch on **Advanced View** (top right), and fill in:
+
+   | Field | Value |
+   |---|---|
+   | Name | `3mf-library` |
+   | Repository | `ghcr.io/jurjen74/3mf-library:latest` |
+   | Network Type | `Bridge` |
+   | Extra Parameters | `--user 99:100 --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --memory 3g` |
+   | WebUI | `http://[IP]:[PORT:8080]/` |
+
+   Then add, with **Add another Path, Port, Variable, Label or Device**:
+
+   | Config type | Name | Container | Host | Access mode |
+   |---|---|---|---|---|
+   | Port | Web | `8080` | `8085` | |
+   | Path | Library | `/library` | `/mnt/user/3d-prints` | **Read Only** |
+   | Path | Data | `/data` | `/mnt/user/appdata/3mf-library` | Read/Write |
+   | Variable | Home network | `TRUSTED_NETWORKS` | `192.168.1.0/24` | |
+   | Variable | Time zone | `TZ` | `Europe/Amsterdam` | |
+
+   `--user 99:100` is Unraid's `nobody:users`, which owns user shares by default.
+
+4. **Apply.** Unraid downloads the image and starts the container. The container's **Logs** should show
+   `Scan finished … files in … folders`.
+
+5. **Open** the WebUI from the container's icon (or `http://<server>:8085`) and
+   [create the first account](/start/first-account/).
+
+</Steps>
+
+<Aside type="tip">
+If the data folder was created by root and the log says it can't write to `/data`, fix the owner once in the terminal:
+`chown -R 99:100 /mnt/user/appdata/3mf-library`.
+</Aside>
+
+## Updating
+
+Unraid shows **update ready** on the Docker tab when a new `latest` image exists; click it, or **Check for Updates**
+at the bottom of the tab.
+
+## HTTPS
+
+Use a reverse proxy container (Nginx Proxy Manager, SWAG, Caddy or Traefik) and set the variable `KNOWN_PROXIES` to
+its address. See [Reverse proxy and HTTPS](/guides/reverse-proxy/).
+
+## With Docker Compose instead
+
+With the *Docker Compose Manager* plugin you can use the regular
+[docker-compose.yml](/install/linux/) instead of the form; set `LIBRARY_DIR=/mnt/user/3d-prints`, `PUID=99` and
+`PGID=100` in its `.env`.
