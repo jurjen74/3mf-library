@@ -104,6 +104,10 @@
                 {
                     <text>Scanning the library…</text>
                 }
+                else if (status.LastScanFailed)
+                {
+                    <strong class="warn">Last scan failed @Display.Ago(status.LastFailed)</strong><text> · showing the last index</text>
+                }
                 else if (status.LastResult is { LibraryOnline: false })
                 {
                     <strong class="warn">Library folder unavailable</strong><text> · showing the last index</text>

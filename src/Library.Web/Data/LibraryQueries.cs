@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Dapper;
 
@@ -114,8 +115,11 @@ public sealed class LibraryQueries(LibraryDb db)
             """, new { folder, limit }).AsList();
     }
 
-    /// <summary>Models whose name, title, designer, folder or object names match every word of <paramref name="text"/> (prefix match).</summary>
-    public IReadOnlyList<FileRow> Search(string text, int limit)
+    /// <summary>
+    /// Files whose name, title, designer, folder or object names match every word of <paramref name="text"/> (prefix
+    /// match), models first; only files of <paramref name="kind"/> when it's given.
+    /// </summary>
+    public IReadOnlyList<FileRow> Search(string text, int limit, string? kind = null)
     {
         var match = ToFtsQuery(text);
         if (match is null)
@@ -128,13 +132,35 @@ public sealed class LibraryQueries(LibraryDb db)
             SELECT {FileColumns}
             FROM files_fts
             JOIN files f ON f.id = files_fts.rowid
-            WHERE files_fts MATCH @match
+            WHERE files_fts MATCH @match AND (@kind IS NULL OR f.kind = @kind)
             ORDER BY CASE WHEN f.kind IN ('3mf', 'stl') THEN 0 ELSE 1 END, bm25(files_fts, 10.0, 8.0, 4.0, 2.0, 1.0, 0.3)
             LIMIT @limit
-            """, new { match, limit }).AsList();
+            """, new { match, limit, kind }).AsList();
     }
 
-    /// <summary>Folders whose own name contains <paramref name="text"/>.</summary>
+    /// <summary>How many models of each kind match <paramref name="text"/> in all (for the 3MF/STL buttons).</summary>
+    public IReadOnlyDictionary<string, long> SearchModelCounts(string text)
+    {
+        var match = ToFtsQuery(text);
+        if (match is null)
+        {
+            return new Dictionary<string, long>();
+        }
+
+        using var connection = db.Open();
+        return connection.Query<(string Kind, long Count)>("""
+            SELECT f.kind, COUNT(*)
+            FROM files_fts
+            JOIN files f ON f.id = files_fts.rowid
+            WHERE files_fts MATCH @match AND f.kind IN ('3mf', 'stl')
+            GROUP BY f.kind
+            """, new { match }).ToDictionary(r => r.Kind, r => r.Count, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Folders whose own name contains <paramref name="text"/>, ignoring case and accents like the file search does
+    /// ("uber" finds "Über"). Matched in .NET: SQLite's lower() only folds ASCII.
+    /// </summary>
     public IReadOnlyList<FolderRow> SearchFolders(string text, int limit)
     {
         var term = text.Trim();
@@ -144,17 +170,29 @@ public sealed class LibraryQueries(LibraryDb db)
         }
 
         using var connection = db.Open();
+        var paths = connection.Query<(string Path, string Name)>("SELECT path, name FROM folders WHERE path <> ''")
+            .Where(f => CultureInfo.InvariantCulture.CompareInfo.IndexOf(f.Name, term, FolderMatch) >= 0)
+            .Select(f => f.Path)
+            .Order(StringComparer.Ordinal)
+            .Take(limit)
+            .ToList();
+        if (paths.Count == 0)
+        {
+            return [];
+        }
+
         return connection.Query<FolderRow>("""
             SELECT f.path, f.parent, f.name,
                    (SELECT COUNT(*) FROM files x
                     WHERE (x.folder = f.path OR substr(x.folder, 1, length(f.path) + 1) = f.path || '/')
                       AND x.kind IN ('3mf', 'stl')) AS model_count
             FROM folders f
-            WHERE f.path <> '' AND instr(lower(f.name), lower(@term)) > 0
+            WHERE f.path IN @paths
             ORDER BY f.path
-            LIMIT @limit
-            """, new { term, limit }).AsList();
+            """, new { paths }).AsList();
     }
+
+    private const CompareOptions FolderMatch = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace;
 
     public IReadOnlyList<FileRow> Recent(int limit)
     {

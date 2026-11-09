@@ -30,9 +30,13 @@ public sealed class SearchModel(LibraryQueries queries) : PageModel
         }
 
         Folders = queries.SearchFolders(Query, 24);
-        var files = queries.Search(Query, MaxResults + 1);
+
+        // A 3MF/STL filter is applied in the query, so matches beyond the first 200 of all kinds still show.
+        var type = ModelListView.TypeFilter(Request);
+        var files = queries.Search(Query, MaxResults + 1, type.Length == 0 ? null : type);
         Truncated = files.Count > MaxResults;
-        List = ModelListView.Create(Request, files.Take(MaxResults).Where(f => FileKinds.IsModel(f.Kind)), sorts);
+        List = ModelListView.Create(Request, files.Take(MaxResults).Where(f => FileKinds.IsModel(f.Kind)),
+            queries.SearchModelCounts(Query), sorts);
         OtherFiles = List.Filtered ? [] : files.Take(MaxResults).Where(f => !FileKinds.IsModel(f.Kind)).ToList();
     }
 }

@@ -17,7 +17,8 @@ public static class ThreeMfMeshReader
     private const string MainModel = "3D/3dmodel.model";
 
     /// <summary>Geometry on one plate, or everything in the build when <paramref name="plate"/> is null.</summary>
-    public static Mesh Read(ZipArchive zip, int? plate)
+    /// <param name="maxTriangles">Refuse more than this, both while reading the model files and in the result.</param>
+    public static Mesh Read(ZipArchive zip, int? plate, int maxTriangles = MaxTriangles)
     {
         var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in zip.Entries)
@@ -28,6 +29,7 @@ public static class ThreeMfMeshReader
         var settings = ReadSettings(entries);
         var mesh = new Mesh(ReadPalette(entries));
         var models = new Dictionary<string, ModelFile>(StringComparer.OrdinalIgnoreCase);
+        var budget = new ParseBudget(maxTriangles);
 
         ModelFile Load(string path)
         {
@@ -39,7 +41,7 @@ public static class ThreeMfMeshReader
                     throw new InvalidDataException($"3MF refers to missing part '{path}'.");
                 }
 
-                model = ParseModel(entry);
+                model = ParseModel(entry, budget);
                 models[path] = model;
             }
 
@@ -108,9 +110,9 @@ public static class ThreeMfMeshReader
                         ((colour % mesh.Palette.Count) + mesh.Palette.Count) % mesh.Palette.Count);
                 }
 
-                if (mesh.TriangleCount > MaxTriangles)
+                if (mesh.TriangleCount > maxTriangles)
                 {
-                    throw new InvalidDataException($"3MF has more than {MaxTriangles} triangles.");
+                    throw new InvalidDataException($"3MF has more than {maxTriangles} triangles.");
                 }
             }
 
@@ -190,7 +192,7 @@ public static class ThreeMfMeshReader
         };
     }
 
-    private static ModelFile ParseModel(ZipArchiveEntry entry)
+    private static ModelFile ParseModel(ZipArchiveEntry entry, ParseBudget budget)
     {
         var model = new ModelFile();
         using var stream = entry.Open();
@@ -248,9 +250,11 @@ public static class ThreeMfMeshReader
                     current.Mesh = new SourceMesh();
                     break;
                 case "vertex" when current?.Mesh is { } mesh:
+                    budget.CountVertex();
                     mesh.Vertices.Add(new Vector3(Float(reader, "x"), Float(reader, "y"), Float(reader, "z")));
                     break;
                 case "triangle" when current?.Mesh is { } mesh:
+                    budget.CountTriangle();
                     mesh.Triangles.Add(Int(reader, "v1"));
                     mesh.Triangles.Add(Int(reader, "v2"));
                     mesh.Triangles.Add(Int(reader, "v3"));
@@ -500,6 +504,33 @@ public static class ThreeMfMeshReader
         }
 
         return palette;
+    }
+
+    /// <summary>
+    /// Stops reading model files as soon as they hold more geometry than a mesh may have, instead of loading all of
+    /// it into memory first and refusing it afterwards.
+    /// </summary>
+    private sealed class ParseBudget(int maxTriangles)
+    {
+        private long _vertices;
+        private long _triangles;
+
+        public void CountVertex()
+        {
+            // A closed mesh has about half as many vertices as triangles; this only catches the absurd.
+            if (++_vertices > maxTriangles)
+            {
+                throw new InvalidDataException($"3MF model files hold more than {maxTriangles} vertices.");
+            }
+        }
+
+        public void CountTriangle()
+        {
+            if (++_triangles > maxTriangles)
+            {
+                throw new InvalidDataException($"3MF model files hold more than {maxTriangles} triangles.");
+            }
+        }
     }
 
     private sealed class ModelFile

@@ -236,6 +236,11 @@ public sealed class LibraryScannerTests : IDisposable
         Assert.True(File.Exists(model.Path));
         Assert.Equal(plate.Path, again.Path);
         Assert.Null((await meshes.GetAsync(lampKey, "../../etc", CancellationToken.None)).Path);
+
+        // Only the meshes a file page links to: no plates for an STL, no plate the 3MF doesn't have.
+        Assert.Null((await meshes.GetAsync(cubeKey, "plate_1", CancellationToken.None)).Path);
+        Assert.Null((await meshes.GetAsync(lampKey, "plate_9", CancellationToken.None)).Path);
+        Assert.False(File.Exists(Path.Combine(_options.CachePath, cubeKey, "mesh_plate_1.bin.gz")));
         Assert.Null((await meshes.GetAsync("0000000000000000", "model", CancellationToken.None)).Path);
     }
 
@@ -285,6 +290,60 @@ public sealed class LibraryScannerTests : IDisposable
         // A file that reads fine isn't read again.
         clock.Advance(LibraryScanner.RetryFailedAfter * 2);
         Assert.Equal(0, scanner.Scan(CancellationToken.None).Indexed);
+    }
+
+    [Fact]
+    public void Search_filters_by_type_in_the_query_and_counts_every_match()
+    {
+        for (var i = 1; i <= 201; i++)
+        {
+            Write($"arm {i}.3mf", TestThreeMf.Prusa());
+        }
+
+        Write("arm/part.stl", TestMeshes.BinaryStl()); // matches on its folder only, so it ranks below the 3MFs
+        _scanner.Scan(CancellationToken.None);
+
+        Assert.DoesNotContain(_queries.Search("arm", 201), f => f.Kind == FileKinds.Stl);
+        Assert.Equal(["arm/part.stl"], _queries.Search("arm", 201, FileKinds.Stl).Select(f => f.Path));
+        Assert.Equal(201, _queries.Search("arm", 500, FileKinds.ThreeMf).Count);
+        Assert.Equal(new Dictionary<string, long> { [FileKinds.ThreeMf] = 201, [FileKinds.Stl] = 1 }, _queries.SearchModelCounts("arm"));
+    }
+
+    [Theory]
+    [InlineData("uber")]
+    [InlineData("ÜBER")]
+    [InlineData("lamp")]
+    public void Folder_search_ignores_case_and_accents_beyond_ascii(string term)
+    {
+        Write("Über Lamp/x.stl", TestMeshes.BinaryStl());
+        Write("Other/y.stl", TestMeshes.BinaryStl());
+        _scanner.Scan(CancellationToken.None);
+
+        var folder = Assert.Single(_queries.SearchFolders(term, 24));
+        Assert.Equal("Über Lamp", folder.Path);
+        Assert.Equal(1, folder.ModelCount);
+    }
+
+    [Fact]
+    public async Task A_failing_scan_is_reported_until_one_succeeds()
+    {
+        var blocker = Path.Combine(_root, "not-a-folder");
+        File.WriteAllText(blocker, "");
+        var options = new LibraryOptions { LibraryPath = _options.LibraryPath, DataPath = blocker }; // cache can't be created
+        var scanner = new LibraryScanner(options, new LibraryDb(options), new LibraryPaths(options), NullLogger<LibraryScanner>.Instance);
+        using var indexer = new IndexerService(scanner, options, NullLogger<IndexerService>.Instance);
+
+        await indexer.StartAsync(TestContext.Current.CancellationToken);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!indexer.Status.LastScanFailed && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        await indexer.StopAsync(TestContext.Current.CancellationToken);
+        Assert.True(indexer.Status.LastScanFailed);
+        Assert.NotNull(indexer.Status.LastFailed);
+        Assert.Null(indexer.Status.LastFinished);
     }
 
     private sealed class ManualClock(DateTimeOffset start) : TimeProvider

@@ -17,6 +17,8 @@ services:
         required: false
     environment:
       SITE_TITLE: "3D Print library"
+      # Dates on the site ("Modified", "Added") are shown in this zone; the image has the zone data.
+      TZ: "Europe/Amsterdam"
       SCAN_INTERVAL: "00:03:00"
       IGNORE: "datapackage.json;._*;@eaDir;#recycle;#snapshot;Thumbs.db;desktop.ini;*.tmp"
       # Direct visitors from here need no login. Requests through a proxy always do.

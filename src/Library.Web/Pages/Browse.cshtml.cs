@@ -42,6 +42,9 @@ public sealed class BrowseModel(LibraryQueries queries, IndexerService indexer) 
     /// <summary>True while the very first scan hasn't produced anything to show yet.</summary>
     public bool StillIndexing { get; private set; }
 
+    /// <summary>Set when there's nothing to show because the scans fail (the reason, for the notice).</summary>
+    public string? ScanError { get; private set; }
+
     public IActionResult OnGet(string? path)
     {
         if (!LibraryPaths.TryNormalize(path, out var folder))
@@ -53,6 +56,7 @@ public sealed class BrowseModel(LibraryQueries queries, IndexerService indexer) 
         if (rows.Count == 0)
         {
             StillIndexing = indexer.Status.LastFinished is null;
+            ScanError = StillIndexing ? indexer.Status.LastError : null;
             return folder.Length == 0 || StillIndexing ? Page() : NotFound();
         }
 

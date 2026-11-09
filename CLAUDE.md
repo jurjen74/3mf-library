@@ -112,10 +112,10 @@ in the repo — tests build synthetic 3MF/STL in code.
 | App on the VM | `/opt/3mf-library/` → `docker-compose.yml` (copied from the repo), `.env` (`KNOWN_PROXIES=192.168.2.233`, not in git), `data/` |
 | Reverse proxy | Nginx Proxy Manager LXC `192.168.2.233` (reservation `BC:24:11:97:4F:C1`) → `http://192.168.2.213:8085`; Force SSL, HTTP/2, HSTS, Cache Assets off |
 | Router | 80/443 → NPM; port 8085 is not forwarded |
-| Container | port 8085→8080, UID 1000, read-only root fs, no capabilities, NFS volume `library` mounted `:ro`, `mem_limit` `MEMORY_LIMIT` from `.env` (default 3g) |
+| Container | port 8085→8080, UID 1000, read-only root fs, no capabilities, NFS volume `library` mounted `:ro`, `mem_limit` `MEMORY_LIMIT` from `.env` (default 3g), `TZ=Europe/Amsterdam` (dates on the site) |
 
 Env vars: `LIBRARY_PATH`, `DATA_PATH`, `SCAN_INTERVAL` (00:03:00), `SETTLE_DELAY` (00:00:10), `IGNORE`, `SITE_TITLE`,
-`TRUSTED_NETWORKS`, `KNOWN_PROXIES`. Inotify doesn't work over NFS, so the indexer polls; Cloud Sync writes files in
+`TRUSTED_NETWORKS`, `KNOWN_PROXIES`, `TZ`. `/health` (anonymous) returns 503 `scan-failed` while scans throw. Inotify doesn't work over NFS, so the indexer polls; Cloud Sync writes files in
 parts, hence the settle delay.
 
 ## Commands

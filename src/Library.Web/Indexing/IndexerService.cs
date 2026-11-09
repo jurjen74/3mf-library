@@ -1,6 +1,16 @@
 namespace Library.Web.Indexing;
 
-public sealed record IndexerStatus(bool Scanning, DateTimeOffset? LastFinished, ScanResult? LastResult);
+/// <param name="LastFinished">When the last successful scan ended.</param>
+/// <param name="LastError">Why the most recent scan failed; null once a scan succeeds again.</param>
+public sealed record IndexerStatus(
+    bool Scanning,
+    DateTimeOffset? LastFinished,
+    ScanResult? LastResult,
+    string? LastError = null,
+    DateTimeOffset? LastFailed = null)
+{
+    public bool LastScanFailed => LastError is not null;
+}
 
 /// <summary>Scans at startup, then every <see cref="LibraryOptions.ScanInterval"/> or when asked to.</summary>
 public sealed class IndexerService(LibraryScanner scanner, LibraryOptions options, ILogger<IndexerService> log) : BackgroundService
@@ -44,7 +54,7 @@ public sealed class IndexerService(LibraryScanner scanner, LibraryOptions option
             catch (Exception ex)
             {
                 log.LogError(ex, "Library scan failed");
-                Status = Status with { Scanning = false };
+                Status = Status with { Scanning = false, LastError = ex.Message, LastFailed = DateTimeOffset.UtcNow };
             }
 
             // Files still being written get another look soon rather than at the next regular scan.

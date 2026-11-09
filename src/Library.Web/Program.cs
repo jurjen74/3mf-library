@@ -172,12 +172,18 @@ app.MapGet("/manifest.webmanifest", () => Results.Json(new
     },
 }, contentType: "application/manifest+json")).AllowAnonymous();
 
-app.MapGet("/health", (IndexerService indexer) => Results.Ok(new
+// 503 while scans fail, for a monitor. Anonymous, so no error text: that's in the log and on the site.
+app.MapGet("/health", (IndexerService indexer) =>
 {
-    status = "ok",
-    lastScan = indexer.Status.LastFinished,
-    libraryOnline = indexer.Status.LastResult?.LibraryOnline,
-})).AllowAnonymous();
+    var status = indexer.Status;
+    return Results.Json(new
+    {
+        status = status.LastScanFailed ? "scan-failed" : "ok",
+        lastScan = status.LastFinished,
+        lastFailure = status.LastFailed,
+        libraryOnline = status.LastResult?.LibraryOnline,
+    }, statusCode: status.LastScanFailed ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status200OK);
+}).AllowAnonymous();
 
 // Previews extracted into the cache. The key changes whenever the file does, so they can be cached forever —
 // privately: they sit behind the login and must not end up in a shared (proxy) cache.

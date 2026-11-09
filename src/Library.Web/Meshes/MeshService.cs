@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text.RegularExpressions;
@@ -25,13 +24,11 @@ public sealed partial class MeshService(
 
     public const int MaxViewerTriangles = 750_000;
 
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new(StringComparer.Ordinal);
-
     public static bool IsValidName(string name) => NamePattern().IsMatch(name);
 
     public async Task<MeshResult> GetAsync(string cacheKey, string name, CancellationToken cancellationToken)
     {
-        if (!IsValidName(name) || queries.FindByCacheKey(cacheKey) is not { } file || !FileKinds.IsModel(file.Kind))
+        if (!IsValidName(name) || queries.FindByCacheKey(cacheKey) is not { } file || !Offers(file, name))
         {
             return new MeshResult(null, null);
         }
@@ -43,25 +40,32 @@ public sealed partial class MeshService(
             return new MeshResult(target, null);
         }
 
-        var gate = _gates.GetOrAdd(target, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken);
-        try
+        // One build at a time, viewer and indexer together; the second request for the same mesh finds the file.
+        // Leaving the page while waiting gives up the turn; a build that has started finishes (it gets cached).
+        using (await _work.EnterAsync(cancellationToken))
         {
             if (File.Exists(target))
             {
                 return new MeshResult(target, null);
             }
 
-            // Leaving the page while waiting gives up the turn; a build that has started finishes (it gets cached).
-            using (await _work.EnterAsync(cancellationToken))
-            {
-                return await Task.Run(() => Build(file, name, directory, target), CancellationToken.None);
-            }
+            return await Task.Run(() => Build(file, name, directory, target), CancellationToken.None);
         }
-        finally
+    }
+
+    /// <summary>
+    /// The meshes a file page links to: <c>model</c> for every model, <c>plate_N</c> only for a 3MF plate the index
+    /// knows. Anything else would build (and cache) the same STL again, or parse a 3MF for a plate that isn't there.
+    /// </summary>
+    private bool Offers(FileRow file, string name)
+    {
+        if (name == "model")
         {
-            gate.Release();
+            return FileKinds.IsModel(file.Kind);
         }
+
+        var plate = int.Parse(name["plate_".Length..], CultureInfo.InvariantCulture);
+        return file.Kind == FileKinds.ThreeMf && queries.Plates(file.Id).Any(p => p.Idx == plate);
     }
 
     private MeshResult Build(FileRow file, string name, string directory, string target)

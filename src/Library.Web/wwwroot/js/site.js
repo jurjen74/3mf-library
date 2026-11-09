@@ -119,6 +119,7 @@
     const details = document.getElementById("stage-details");
     if (!figure || !toggle || !container) return null;
 
+    // A promise, so a plate picked while viewer.js is still loading doesn't create a second viewer.
     let viewer = null;
     let loading = null;
     let active = false;
@@ -135,11 +136,8 @@
       loading = controller;
       setStatus("Loading 3D model… large models can take a few seconds the first time.");
       try {
-        if (!viewer) {
-          const { Viewer } = await import("/js/viewer.js");
-          viewer = new Viewer(container);
-        }
-        const result = await viewer.load(figure.dataset.mesh, controller.signal);
+        viewer ??= import("/js/viewer.js").then(({ Viewer }) => new Viewer(container));
+        const result = await (await viewer).load(figure.dataset.mesh, controller.signal);
         if (controller.signal.aborted) return;
         if (result.triangles === 0) {
           setStatus("Nothing on this plate.");
@@ -153,6 +151,7 @@
         }
       } catch (error) {
         if (error.name !== "AbortError") setStatus(error.message || "Could not load the 3D model.");
+        if (viewer && !(await viewer.catch(() => null))) viewer = null; // viewer.js failed to load: try again next time
       }
     };
 
@@ -421,6 +420,7 @@
 
   // File page: ← / → go to the previous / next model in the folder.
   document.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     if (isTyping(event) || dialog?.open || event.altKey || event.ctrlKey || event.metaKey) return;
     const link = document.querySelector(`a[data-key="${event.key}"]`);
     if (link) window.location.href = link.href;

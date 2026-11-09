@@ -37,7 +37,15 @@ public sealed class ModelListView
     public bool Filtered { get; init; }
 
     /// <param name="sorts">The sort orders this page offers; the first is the default.</param>
-    public static ModelListView Create(HttpRequest request, IEnumerable<FileRow> models, params string[] sorts)
+    public static ModelListView Create(HttpRequest request, IEnumerable<FileRow> models, params string[] sorts) =>
+        Create(request, models, null, sorts);
+
+    /// <param name="kindCounts">
+    /// Models per kind for the type buttons, when <paramref name="models"/> is already filtered or cut short (search);
+    /// null to count <paramref name="models"/> itself.
+    /// </param>
+    public static ModelListView Create(HttpRequest request, IEnumerable<FileRow> models,
+        IReadOnlyDictionary<string, long>? kindCounts, string[] sorts)
     {
         var all = models.ToList();
         var sort = request.Query["sort"].ToString();
@@ -46,20 +54,16 @@ public sealed class ModelListView
             sort = sorts[0];
         }
 
-        var kinds = all.GroupBy(f => f.Kind).ToDictionary(g => g.Key, g => (long)g.Count(), StringComparer.Ordinal);
-        var type = request.Query["type"].ToString();
-        if (type is not (FileKinds.ThreeMf or FileKinds.Stl))
-        {
-            type = "";
-        }
-
+        var kinds = kindCounts?.Where(k => k.Value > 0).ToDictionary(k => k.Key, k => k.Value, StringComparer.Ordinal)
+                    ?? all.GroupBy(f => f.Kind).ToDictionary(g => g.Key, g => (long)g.Count(), StringComparer.Ordinal);
+        var type = TypeFilter(request);
         var shown = type.Length == 0 ? all : all.Where(f => f.Kind == type).ToList();
 
         // Only offer the filter when the list mixes both kinds (or a filter is already on and must be undone).
         var typeOptions = kinds.Count > 1 || type.Length > 0
             ? new List<ListOption>
             {
-                new("All", With(request, "type", null), type.Length == 0, all.Count),
+                new("All", With(request, "type", null), type.Length == 0, kindCounts is null ? all.Count : kinds.Values.Sum()),
                 new("3MF", With(request, "type", FileKinds.ThreeMf), type == FileKinds.ThreeMf, kinds.GetValueOrDefault(FileKinds.ThreeMf)),
                 new("STL", With(request, "type", FileKinds.Stl), type == FileKinds.Stl, kinds.GetValueOrDefault(FileKinds.Stl)),
             }
@@ -75,6 +79,10 @@ public sealed class ModelListView
             Filtered = type.Length > 0,
         };
     }
+
+    /// <summary>The <c>?type=</c> filter: <c>3mf</c>, <c>stl</c>, or "" for all models.</summary>
+    public static string TypeFilter(HttpRequest request) =>
+        request.Query["type"].ToString() is var type && type is FileKinds.ThreeMf or FileKinds.Stl ? type : "";
 
     private static List<FileRow> Sort(List<FileRow> files, string sort) => sort switch
     {

@@ -21,7 +21,14 @@
 </aside>
 
 <main class="content">
-    @if (Model.StillIndexing)
+    @if (Model.ScanError is not null)
+    {
+        <div class="notice notice--error" data-reload="60">
+            <strong>The library scan failed.</strong>
+            @Model.ScanError It's tried again every few minutes (or use Rescan now below); the container log has the details.
+        </div>
+    }
+    else if (Model.StillIndexing)
     {
         <div class="notice" data-reload="3">
             <strong>Indexing the library…</strong>

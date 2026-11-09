@@ -141,6 +141,16 @@ public class MeshTests
     }
 
     [Fact]
+    public void Stops_reading_model_files_that_hold_too_many_triangles()
+    {
+        using var zip = TestThreeMf.Open(TestMeshes.CoreThreeMf()); // one 12-triangle cube
+
+        var error = Assert.Throws<InvalidDataException>(() => ThreeMfMeshReader.Read(zip, plate: null, maxTriangles: 10));
+        Assert.Contains("model files hold more than 10 triangles", error.Message);
+        Assert.Equal(24, ThreeMfMeshReader.Read(zip, plate: null, maxTriangles: 30).TriangleCount);
+    }
+
+    [Fact]
     public void Ignores_filament_colours_that_are_not_strings()
     {
         var bytes = TestThreeMf.Rewrite(TestMeshes.BambuThreeMf(), "Metadata/project_settings.config",

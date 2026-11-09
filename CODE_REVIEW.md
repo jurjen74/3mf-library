@@ -17,14 +17,14 @@ pipeline, plus a few small UI and query bugs.
 | 1 | Medium ✅ fixed | Meshes / ops | Mesh builds have no overall concurrency limit and the container has no memory limit, so it can run out of memory |
 | 2 | Medium ✅ fixed | Meshes | Some malformed 3MF input throws exception types that `MeshService` doesn't catch, which gives a 500 |
 | 3 | Medium ✅ fixed | Indexing | A file that fails to index once (e.g. a brief NFS error) is never retried until the file itself changes |
-| 4 | Low | Meshes | `/mesh/{key}/plate_N.bin` accepts any N for any model: duplicate STL meshes, wasted 3MF parses |
-| 5 | Low | Front-end | Pressing `"` or `\` throws in the ←/→ keyboard handler |
-| 6 | Low | Front-end | The first 3D load can create two viewers (two canvases) |
-| 7 | Low | Search | The 3MF/STL filter is applied after the 200-result cut |
-| 8 | Low | Search | Folder search is case-insensitive for ASCII letters only |
-| 9 | Low | Display | Dates are shown in UTC (the container has no `TZ`) |
-| 10 | Low | Indexer | If the first scan throws, the site shows "still indexing" forever and `/health` still says ok |
-| 11 | Low | Meshes | Leftover `.tmp-*` mesh files when a write fails; the 3MF parser has no triangle limit while parsing |
+| 4 | Low ✅ fixed | Meshes | `/mesh/{key}/plate_N.bin` accepts any N for any model: duplicate STL meshes, wasted 3MF parses |
+| 5 | Low ✅ fixed | Front-end | Pressing `"` or `\` throws in the ←/→ keyboard handler |
+| 6 | Low ✅ fixed | Front-end | The first 3D load can create two viewers (two canvases) |
+| 7 | Low ✅ fixed | Search | The 3MF/STL filter is applied after the 200-result cut |
+| 8 | Low ✅ fixed | Search | Folder search is case-insensitive for ASCII letters only |
+| 9 | Low ✅ fixed | Display | Dates are shown in UTC (the container has no `TZ`) |
+| 10 | Low ✅ fixed | Indexer | If the first scan throws, the site shows "still indexing" forever and `/health` still says ok |
+| 11 | Low ✅ fixed | Meshes | Leftover `.tmp-*` mesh files when a write fails; the 3MF parser has no triangle limit while parsing |
 | 12 | Info | Various | Small things: shared rate-limit budget, server paths in error text, query costs per request |
 
 ---
@@ -111,6 +111,8 @@ temporary read error with file permissions.
 
 ## Low
 
+All low findings were fixed after the review as well; each section ends with what changed.
+
 ### 4. `/mesh` accepts any plate name for any model
 
 `MeshService.IsValidName` allows `model` and `plate_0`…`plate_999` (`MeshService.cs:98`), and nothing checks the name
@@ -125,6 +127,9 @@ Only logged-in users can reach this, so it's waste rather than an attack. Still,
 `model` for STLs, and for 3MFs check the plate index against `queries.Plates(file.Id)` (or against
 `file.PlateCount`).
 
+**Fixed:** `MeshService.Offers` accepts `model` for any model and `plate_N` only for a 3MF plate in the index; anything
+else is a 404 before the file is opened.
+
 ### 5. Keyboard handler throws on `"` and `\`
 
 `wwwroot/js/site.js:425` builds a selector from the key: ``document.querySelector(`a[data-key="${event.key}"]`)``. The
@@ -133,6 +138,8 @@ an input. It does no harm, but it fills the console with errors.
 
 **Suggested fix:** only look up the keys you use: `if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;`
 (or use `CSS.escape(event.key)`).
+
+**Fixed** with that early return; checked in the browser (no console errors, arrows still navigate).
 
 ### 6. First 3D load can create two viewers
 
@@ -143,6 +150,9 @@ another plate during that time (`setMesh` → `load()`), the second call also pa
 **Suggested fix:** store the promise instead of the instance:
 `viewerPromise ??= import(...).then(({ Viewer }) => new Viewer(container));`.
 
+**Fixed** that way (if `viewer.js` fails to load, the next try imports it again); checked in the browser by toggling
+3D on/off/on in one go: one canvas.
+
 ### 7. Type filter applied after truncation
 
 `Pages/Search.cshtml.cs:33-36` fetches 201 rows, keeps the first 200 and **then** applies `?type=stl`. With a broad
@@ -150,6 +160,9 @@ query, STL matches ranked below position 200 disappear, even though the filtered
 the type buttons have the same problem.
 
 **Suggested fix:** pass the kind to `LibraryQueries.Search` (`AND f.kind = @kind`) when a filter is on.
+
+**Fixed:** `Search(text, limit, kind)` filters in SQL, and the type buttons count every match with
+`SearchModelCounts` (passed to `ModelListView.Create`), not just the rows on the page.
 
 ### 8. Folder search: ASCII-only case folding
 
@@ -160,14 +173,19 @@ FTS5 `unicode61`, which handles this correctly.
 **Suggested fix:** filter folders in C# (there are few of them) with `CompareInfo.IndexOf(..., IgnoreCase |
 IgnoreNonSpace)`, or register a custom SQLite function.
 
+**Fixed** in C# with `IgnoreCase | IgnoreNonSpace`, so "uber" and "ÜBER" both find "Über", like the file search.
+
 ### 9. Dates shown in UTC
 
 `Display.Date` calls `ToLocalTime()` (`Display.cs:43`), but neither the Dockerfile nor `docker-compose.yml` sets `TZ`,
-and the `aspnet` image has no zone data configured. So "Modified" on the file page and "Added" on the Users page are in
+so the container runs in UTC. So "Modified" on the file page and "Added" on the Users page are in
 UTC: a file saved at 00:30 Dutch time shows the previous day.
 
 **Suggested fix:** `TZ: "Europe/Amsterdam"` in `docker-compose.yml` (.NET reads `TZ`; the image includes ICU/tzdata),
 or format with an explicit `TimeZoneInfo`.
+
+**Fixed:** `TZ: "Europe/Amsterdam"` in `docker-compose.yml` (the image, Ubuntu 24.04, has
+`/usr/share/zoneinfo/Europe/Amsterdam`; checked).
 
 ### 10. A failing first scan looks like "still indexing" forever
 
@@ -177,6 +195,10 @@ reloads every few seconds, and `/health` still returns `status: "ok"`.
 
 **Suggested fix:** keep a `LastError` / `LastFailed` in `IndexerStatus`, show it on the empty Browse page and in the
 footer, and let `/health` report it (`503` is useful if a monitor ever watches it).
+
+**Fixed:** `IndexerStatus` has `LastError` / `LastFailed` (cleared by the next good scan). An empty Browse page shows
+the error and reloads once a minute; the footer says "Last scan failed … · showing the last index"; `/health` returns
+`503` with `status: "scan-failed"` and `lastFailure` (no error text, it's anonymous).
 
 ### 11. Small resource leaks in the mesh code
 
@@ -188,6 +210,11 @@ footer, and let `/health` report it (`503` is useful if a monitor ever watches i
   earlier.
 - `_gates` in `MeshService` is never trimmed. That's harmless at this size (one small object per mesh ever requested);
   just noting it.
+
+**Fixed:** the temporary file is deleted in a `finally` (with the medium fixes). `ParseModel` counts vertices and
+triangles across all model files of one read and stops at the limit (`Read` takes an optional `maxTriangles`). The
+per-file `_gates` are gone: the global `MeshWorkGate` already serialises builds, and the file check inside it stops a
+second build of the same mesh.
 
 ---
 
@@ -241,6 +268,5 @@ footer, and let `/health` report it (`503` is useful if a monitor ever watches i
 
 ## Test gaps worth filling
 
-- An unknown plate number on `/mesh` (finding 4). (Findings 2 and 3 now have tests.)
-- Search with `?type=` on more than 200 results (finding 7).
-- Non-ASCII folder search (finding 8).
+All the gaps listed for findings 2–11 now have tests (166 tests in total). Still untested: the site.js fixes
+(findings 5 and 6, checked by hand in the browser) and the `TZ` setting (finding 9, deployment).
