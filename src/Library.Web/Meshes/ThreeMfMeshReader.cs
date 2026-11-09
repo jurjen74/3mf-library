@@ -61,7 +61,7 @@ public static class ThreeMfMeshReader
             // Bambu lists (object, instance) per plate; instance n is the n-th build item of that object.
             var byObject = root.Items.GroupBy(i => i.ObjectId).ToDictionary(g => g.Key, g => g.ToList());
             items = instances
-                .Select(i => byObject.TryGetValue(i.ObjectId, out var list) && i.InstanceId < list.Count ? list[i.InstanceId] : null)
+                .Select(i => byObject.TryGetValue(i.ObjectId, out var list) && i.InstanceId >= 0 && i.InstanceId < list.Count ? list[i.InstanceId] : null)
                 .OfType<BuildItem>()
                 .ToList();
         }
@@ -347,7 +347,15 @@ public static class ThreeMfMeshReader
             throw new InvalidDataException("3MF transform must have 12 numbers.");
         }
 
-        var m = parts.Select(p => float.Parse(p, NumberStyles.Float, CultureInfo.InvariantCulture)).ToArray();
+        var m = new float[12];
+        for (var i = 0; i < 12; i++)
+        {
+            if (!float.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out m[i]) || !float.IsFinite(m[i]))
+            {
+                throw new InvalidDataException("3MF transform has a value that isn't a number.");
+            }
+        }
+
         return new Matrix4x4(
             m[0], m[1], m[2], 0,
             m[3], m[4], m[5], 0,
@@ -476,7 +484,7 @@ public static class ThreeMfMeshReader
                 {
                     foreach (var colour in colours.EnumerateArray())
                     {
-                        var text = colour.GetString();
+                        var text = colour.ValueKind == JsonValueKind.String ? colour.GetString() : null;
                         if (text is { Length: >= 7 } && text[0] == '#' &&
                             uint.TryParse(text.AsSpan(1, 6), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var rgb))
                         {

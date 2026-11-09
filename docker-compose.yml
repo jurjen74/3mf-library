@@ -25,6 +25,9 @@ services:
       - library:/library:ro
       - ./data:/data
     restart: unless-stopped
+    # Keeps a very large model from taking the whole VM: the container stops at this, not the VM, and .NET sizes its
+    # heap to 75% of it. Override with MEMORY_LIMIT in .env (e.g. 6g) if the VM has the room.
+    mem_limit: ${MEMORY_LIMIT:-3g}
     security_opt:
       - no-new-privileges:true
     cap_drop:

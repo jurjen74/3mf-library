@@ -252,6 +252,50 @@ public sealed class LibraryScannerTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_options.CachePath, _queries.FindFile("Lamp.3mf")!.CacheKey!)));
     }
 
+    [Fact]
+    public void Retries_a_file_that_failed_to_read_after_an_hour_even_if_unchanged()
+    {
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root")
+        {
+            return; // the read error is simulated with file permissions
+        }
+
+        Write("Lamp.3mf", TestThreeMf.Bambu("Lamp"));
+        var path = Path.Combine(_options.LibraryPath, "Lamp.3mf");
+        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var scanner = new LibraryScanner(_options, new LibraryDb(_options), new LibraryPaths(_options),
+            NullLogger<LibraryScanner>.Instance, clock: clock);
+
+        // A read error that goes away by itself (like a timeout on the NFS mount); size and mtime stay the same.
+        File.SetUnixFileMode(path, UnixFileMode.None);
+        Assert.Equal(1, scanner.Scan(CancellationToken.None).Errors);
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+        clock.Advance(TimeSpan.FromMinutes(30));
+        Assert.Equal(0, scanner.Scan(CancellationToken.None).Indexed);
+        Assert.NotNull(_queries.FindFile("Lamp.3mf")!.Error);
+
+        clock.Advance(LibraryScanner.RetryFailedAfter);
+        var retry = scanner.Scan(CancellationToken.None);
+        var lamp = _queries.FindFile("Lamp.3mf")!;
+        Assert.Equal(1, retry.Indexed);
+        Assert.Null(lamp.Error);
+        Assert.Equal("Lamp", lamp.Title);
+
+        // A file that reads fine isn't read again.
+        clock.Advance(LibraryScanner.RetryFailedAfter * 2);
+        Assert.Equal(0, scanner.Scan(CancellationToken.None).Indexed);
+    }
+
+    private sealed class ManualClock(DateTimeOffset start) : TimeProvider
+    {
+        private DateTimeOffset _now = start;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
+    }
+
     private void Write(string relativePath, byte[] content)
     {
         var path = Path.Combine(_options.LibraryPath, relativePath);

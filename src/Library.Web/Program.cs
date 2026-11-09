@@ -22,6 +22,7 @@ builder.Services.AddSingleton<LibraryPaths>();
 builder.Services.AddSingleton<LibraryQueries>();
 builder.Services.AddSingleton<LibraryScanner>();
 builder.Services.AddSingleton<IndexerService>();
+builder.Services.AddSingleton<MeshWorkGate>();
 builder.Services.AddSingleton<MeshService>();
 builder.Services.AddSingleton<UserStore>();
 builder.Services.AddSingleton<SlicerLinks>();

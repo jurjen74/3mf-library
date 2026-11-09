@@ -111,4 +111,20 @@ internal static class TestThreeMf
     }
 
     public static ZipArchive Open(byte[] bytes) => new(new MemoryStream(bytes), ZipArchiveMode.Read);
+
+    /// <summary>A copy of a 3MF with the text of one entry changed (for malformed-input tests).</summary>
+    public static byte[] Rewrite(byte[] bytes, string entryName, Func<string, string> change)
+    {
+        using var zip = Open(bytes);
+        var entries = new Dictionary<string, object>(StringComparer.Ordinal);
+        foreach (var entry in zip.Entries)
+        {
+            using var stream = entry.Open();
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            entries[entry.FullName] = entry.FullName == entryName ? change(Encoding.UTF8.GetString(copy.ToArray())) : copy.ToArray();
+        }
+
+        return Build(entries);
+    }
 }

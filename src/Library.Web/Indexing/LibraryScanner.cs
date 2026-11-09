@@ -28,7 +28,13 @@ public sealed record ScanResult(
 /// Walks the library, re-reads files whose size or modification time changed, and keeps the index, the search index
 /// and the preview cache in step. Never writes to the library itself.
 /// </summary>
-public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, LibraryPaths paths, ILogger<LibraryScanner> log)
+public sealed class LibraryScanner(
+    LibraryOptions options,
+    LibraryDb db,
+    LibraryPaths paths,
+    ILogger<LibraryScanner> log,
+    MeshWorkGate? workGate = null,
+    TimeProvider? clock = null)
 {
     /// <summary>Bump when extraction changes, so every file is re-read once.</summary>
     public const int IndexerVersion = 4;
@@ -37,9 +43,18 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
     private const long MaxStlBytes = 1024L * 1024 * 1024;
     private const int PreviewSize = 512;
 
+    /// <summary>
+    /// A file that couldn't be read is tried again after this long even when it hasn't changed: the NFS mount is
+    /// "soft" (a timeout is an I/O error) and Cloud Sync can pause half-way through a file for longer than the settle
+    /// delay. A file that is really broken costs one read per interval.
+    /// </summary>
+    public static readonly TimeSpan RetryFailedAfter = TimeSpan.FromHours(1);
+
     private readonly IgnoreMatcher _ignore = new(options.Ignore);
     private readonly DescriptionSanitizer _sanitizer = new();
     private readonly Lock _gate = new();
+    private readonly MeshWorkGate _work = workGate ?? new MeshWorkGate();
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     /// <summary>One scan at a time: two at once would replace each other's preview folders.</summary>
     public ScanResult Scan(CancellationToken cancellationToken)
@@ -66,14 +81,16 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
 
         using var connection = db.Open();
         var existing = connection.Query<ExistingFile>(
-            "SELECT id, path, size, mtime, indexer_version, cache_key FROM files")
+            "SELECT id, path, size, mtime, indexer_version, cache_key, error IS NOT NULL AS failed, indexed_at FROM files")
             .ToDictionary(f => f.Path, StringComparer.Ordinal);
 
+        var retryBefore = _clock.GetUtcNow().Subtract(RetryFailedAfter).ToUnixTimeMilliseconds();
         var changed = walk.Files.Where(file =>
                 !existing.TryGetValue(file.Path, out var previous) ||
                 previous.Size != file.Size ||
                 previous.Mtime != file.Mtime ||
-                previous.IndexerVersion != IndexerVersion)
+                previous.IndexerVersion != IndexerVersion ||
+                (previous.HasFailed && previous.IndexedAt <= retryBefore))
             .ToList();
 
         var (settled, deferred) = Settle(changed, cancellationToken);
@@ -83,7 +100,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         {
             cancellationToken.ThrowIfCancellationRequested();
             indexed++;
-            if (!IndexFile(connection, file, existing.GetValueOrDefault(file.Path)))
+            if (!IndexFile(connection, file, existing.GetValueOrDefault(file.Path), cancellationToken))
             {
                 errors++;
             }
@@ -201,7 +218,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         return new WalkResult(folders, files, complete);
     }
 
-    private bool IndexFile(SqliteConnection connection, WalkedFile file, ExistingFile? previous)
+    private bool IndexFile(SqliteConnection connection, WalkedFile file, ExistingFile? previous, CancellationToken cancellationToken)
     {
         var record = new FileRecord
         {
@@ -212,7 +229,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
             Size = file.Size,
             Mtime = file.Mtime,
             IndexerVersion = IndexerVersion,
-            IndexedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            IndexedAt = _clock.GetUtcNow().ToUnixTimeMilliseconds(),
         };
         var plates = new List<PlateRecord>();
         var photos = new List<string>();
@@ -221,11 +238,12 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         {
             try
             {
-                ReadThreeMf(file, record, plates, photos);
+                ReadThreeMf(file, record, plates, photos, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // One damaged or half-synced file must not stop the scan; it gets another try when it changes.
+                // One damaged or half-synced file must not stop the scan; it gets another try when it changes, or
+                // after RetryFailedAfter.
                 log.LogWarning("Could not read {Path}: {Message}", file.Path, ex.Message);
                 record.Error = ex.Message;
                 record.CacheKey = null;
@@ -239,7 +257,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         {
             try
             {
-                ReadStl(file, record);
+                ReadStl(file, record, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -313,7 +331,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         return record.Error is null;
     }
 
-    private void ReadThreeMf(WalkedFile file, FileRecord record, List<PlateRecord> plates, List<string> photos)
+    private void ReadThreeMf(WalkedFile file, FileRecord record, List<PlateRecord> plates, List<string> photos, CancellationToken cancellationToken)
     {
         if (!paths.TryGetFullPath(file.Path, out var fullPath))
         {
@@ -386,7 +404,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
             // No image anywhere in the file (a bare geometry export): draw one from the meshes.
             if (record.Cover is null)
             {
-                TryRenderGeometry(zip, staging, file, record);
+                TryRenderGeometry(zip, staging, file, record, cancellationToken);
             }
 
             var target = Path.Combine(options.CachePath, key);
@@ -405,7 +423,7 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         }
     }
 
-    private void ReadStl(WalkedFile file, FileRecord record)
+    private void ReadStl(WalkedFile file, FileRecord record, CancellationToken cancellationToken)
     {
         if (!paths.TryGetFullPath(file.Path, out var fullPath))
         {
@@ -417,13 +435,16 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
             throw new InvalidDataException($"STL is larger than {MaxStlBytes / (1024 * 1024)} MB.");
         }
 
-        var mesh = StlReader.Read(fullPath);
         var key = CacheKey(file);
         var staging = Path.Combine(options.CachePath, $"{key}.tmp-{Guid.NewGuid():N}");
         Directory.CreateDirectory(staging);
         try
         {
-            WritePreview(mesh, staging, record);
+            using (_work.Enter(cancellationToken))
+            {
+                WritePreview(StlReader.Read(fullPath), staging, record);
+            }
+
             var target = Path.Combine(options.CachePath, key);
             if (Directory.Exists(target))
             {
@@ -440,14 +461,17 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         }
     }
 
-    private void TryRenderGeometry(ZipArchive zip, string staging, WalkedFile file, FileRecord record)
+    private void TryRenderGeometry(ZipArchive zip, string staging, WalkedFile file, FileRecord record, CancellationToken cancellationToken)
     {
         try
         {
-            var mesh = ThreeMfMeshReader.Read(zip, plate: null);
-            if (mesh.TriangleCount > 0)
+            using (_work.Enter(cancellationToken))
             {
-                WritePreview(mesh, staging, record);
+                var mesh = ThreeMfMeshReader.Read(zip, plate: null);
+                if (mesh.TriangleCount > 0)
+                {
+                    WritePreview(mesh, staging, record);
+                }
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -549,6 +573,10 @@ public sealed class LibraryScanner(LibraryOptions options, LibraryDb db, Library
         public long Mtime { get; init; }
         public long IndexerVersion { get; init; }
         public string? CacheKey { get; init; }
+        public long Failed { get; init; }
+        public long IndexedAt { get; init; }
+
+        public bool HasFailed => Failed != 0;
     }
 
     private sealed class FileRecord

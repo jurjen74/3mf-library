@@ -96,6 +96,61 @@ public class MeshTests
     }
 
     [Fact]
+    public async Task Mesh_work_runs_one_at_a_time()
+    {
+        var gate = new MeshWorkGate();
+        var first = await gate.EnterAsync(CancellationToken.None);
+        var second = gate.EnterAsync(CancellationToken.None);
+
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        Assert.False(second.IsCompleted);
+
+        first.Dispose();
+        first.Dispose(); // a second dispose doesn't free another slot
+        (await second).Dispose();
+        using var cancelled = new CancellationTokenSource();
+        using (gate.Enter(CancellationToken.None))
+        {
+            cancelled.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => gate.EnterAsync(cancelled.Token));
+        }
+    }
+
+    [Fact]
+    public void Skips_plate_instances_with_a_negative_index()
+    {
+        var bytes = TestThreeMf.Rewrite(TestMeshes.BambuThreeMf(), "Metadata/model_settings.config",
+            config => config.Replace(
+                """<metadata key="object_id" value="2"/><metadata key="instance_id" value="0"/>""",
+                """<metadata key="object_id" value="2"/><metadata key="instance_id" value="-1"/>""",
+                StringComparison.Ordinal));
+        using var zip = TestThreeMf.Open(bytes);
+
+        Assert.Empty(ThreeMfMeshReader.Read(zip, plate: 1).Vertices);
+        Assert.Equal(12, ThreeMfMeshReader.Read(zip, plate: 2).TriangleCount);
+    }
+
+    [Fact]
+    public void Rejects_a_transform_that_is_not_numbers_as_invalid_data()
+    {
+        var bytes = TestThreeMf.Rewrite(TestMeshes.BambuThreeMf(), "3D/3dmodel.model",
+            model => model.Replace("1 0 0 0 1 0 0 0 1 100 100 0", "1 0 0 0 1 0 0 0 1 abc 100 0", StringComparison.Ordinal));
+        using var zip = TestThreeMf.Open(bytes);
+
+        Assert.Throws<InvalidDataException>(() => ThreeMfMeshReader.Read(zip, plate: 1));
+    }
+
+    [Fact]
+    public void Ignores_filament_colours_that_are_not_strings()
+    {
+        var bytes = TestThreeMf.Rewrite(TestMeshes.BambuThreeMf(), "Metadata/project_settings.config",
+            _ => """{ "filament_colour": [null, 42, "#0000FF"] }""");
+        using var zip = TestThreeMf.Open(bytes);
+
+        Assert.Equal([0x0000FFu], ThreeMfMeshReader.Read(zip, plate: 2).Palette);
+    }
+
+    [Fact]
     public void Renders_a_preview_with_the_model_in_the_middle_and_a_transparent_border()
     {
         var mesh = StlReader.Read(new MemoryStream(TestMeshes.BinaryStl()));

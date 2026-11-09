@@ -11,10 +11,18 @@ public sealed record MeshResult(string? Path, string? Error);
 
 /// <summary>
 /// Builds viewer meshes on first request (<c>model</c> for a whole STL/3MF, <c>plate_N</c> for one Bambu plate),
-/// simplified to <see cref="MaxViewerTriangles"/> and cached next to the previews.
+/// simplified to <see cref="MaxViewerTriangles"/> and cached next to the previews. Builds run one at a time
+/// (<see cref="MeshWorkGate"/>), shared with the indexer.
 /// </summary>
-public sealed partial class MeshService(LibraryOptions options, LibraryQueries queries, LibraryPaths paths, ILogger<MeshService> log)
+public sealed partial class MeshService(
+    LibraryOptions options,
+    LibraryQueries queries,
+    LibraryPaths paths,
+    ILogger<MeshService> log,
+    MeshWorkGate? workGate = null)
 {
+    private readonly MeshWorkGate _work = workGate ?? new MeshWorkGate();
+
     public const int MaxViewerTriangles = 750_000;
 
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new(StringComparer.Ordinal);
@@ -44,7 +52,11 @@ public sealed partial class MeshService(LibraryOptions options, LibraryQueries q
                 return new MeshResult(target, null);
             }
 
-            return await Task.Run(() => Build(file, name, directory, target), CancellationToken.None);
+            // Leaving the page while waiting gives up the turn; a build that has started finishes (it gets cached).
+            using (await _work.EnterAsync(cancellationToken))
+            {
+                return await Task.Run(() => Build(file, name, directory, target), CancellationToken.None);
+            }
         }
         finally
         {
@@ -60,6 +72,7 @@ public sealed partial class MeshService(LibraryOptions options, LibraryQueries q
         }
 
         var started = DateTime.UtcNow;
+        string? temporary = null;
         try
         {
             Mesh mesh;
@@ -77,7 +90,7 @@ public sealed partial class MeshService(LibraryOptions options, LibraryQueries q
             }
 
             var simplified = MeshSimplifier.Simplify(mesh, MaxViewerTriangles);
-            var temporary = $"{target}.tmp-{Guid.NewGuid():N}";
+            temporary = $"{target}.tmp-{Guid.NewGuid():N}";
             using (var output = File.Create(temporary))
             {
                 MeshCodec.WriteCompressed(simplified, output);
@@ -92,6 +105,31 @@ public sealed partial class MeshService(LibraryOptions options, LibraryQueries q
         {
             log.LogWarning("Could not build viewer mesh {Name} for {Path}: {Message}", name, file.Path, ex.Message);
             return new MeshResult(null, ex.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Unusual input the readers didn't anticipate: the viewer gets a message instead of an error page.
+            log.LogError(ex, "Could not build viewer mesh {Name} for {Path}", name, file.Path);
+            return new MeshResult(null, "Could not read the geometry of this file.");
+        }
+        finally
+        {
+            if (temporary is not null && File.Exists(temporary))
+            {
+                TryDelete(temporary);
+            }
+        }
+    }
+
+    private void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException ex)
+        {
+            log.LogWarning(ex, "Could not remove {Path}", path);
         }
     }
 
