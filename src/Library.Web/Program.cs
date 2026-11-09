@@ -25,6 +25,7 @@ builder.Services.AddSingleton<IndexerService>();
 builder.Services.AddSingleton<MeshWorkGate>();
 builder.Services.AddSingleton<MeshService>();
 builder.Services.AddSingleton<UserStore>();
+builder.Services.AddSingleton<SetupCode>();
 builder.Services.AddSingleton<SlicerLinks>();
 builder.Services.AddSingleton<FavouriteStore>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexerService>());
@@ -92,6 +93,14 @@ var app = builder.Build();
 app.Services.GetRequiredService<LibraryDb>().Migrate();
 var users = app.Services.GetRequiredService<UserStore>();
 users.Migrate();
+if (!users.HasUsers() && SetupCode.IsRequired(options))
+{
+    // No trusted networks: the setup page is open to any direct visitor, so it asks for this code.
+    app.Logger.LogWarning(
+        "No account yet. Open /setup and use this setup code to create the first (admin) account: {SetupCode}",
+        app.Services.GetRequiredService<SetupCode>().Display);
+}
+
 app.Logger.LogInformation(
     "Library: {Library}  Data: {Data}  Scan interval: {Interval}  Accounts: {Accounts}  Trusted networks: {Trusted}  Known proxies: {Proxies}",
     options.LibraryPath, options.DataPath, options.ScanInterval,

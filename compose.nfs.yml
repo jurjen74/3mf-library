@@ -1,0 +1,20 @@
+# Library on an NFS share (e.g. a Synology or TrueNAS export) instead of a local folder. Turn it on in .env:
+#
+#   COMPOSE_FILE=docker-compose.yml:compose.nfs.yml
+#   NFS_SERVER=<NAS address>
+#   NFS_EXPORT=<exported path, e.g. /volume1/3d-models>
+#
+# The share is mounted read-only. "soft" means a NAS that doesn't answer gives an error instead of hanging the
+# container; files that fail that way are tried again within the hour.
+services:
+  3mf-library:
+    volumes:
+      - library:/library:ro
+
+volumes:
+  library:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=${NFS_SERVER:?set NFS_SERVER in .env},nfsvers=${NFS_VERSION:-4.1},ro,soft,timeo=100"
+      device: ":${NFS_EXPORT:?set NFS_EXPORT in .env}"

@@ -1,13 +1,17 @@
 # CLAUDE.md
 
-Guidance for Claude Code sessions in this repository. Repo: `jurjen74/3mf-library` (private GitHub).
+Guidance for Claude Code sessions in this repository. Repo: `jurjen74/3mf-library` on GitHub.
+
+**The repository is general: anyone can run it.** The owner's own installation (servers, addresses, deploy steps) is
+in their private notes, referenced from the git-ignored `CLAUDE.local.md`. Never put those details (IP addresses,
+host names, user names, domains, MAC addresses, NAS paths) in tracked files.
 
 ## What this is
 
-A self-hosted preview site for the owner's 3D print folder (OneDrive "3D Print" → synced to a Synology NAS). It shows
+A self-hosted preview site for a folder of 3D print files (the owner's is a synced cloud folder on a NAS). It shows
 the folders exactly as on disk, previews every model, and adds file pages, search, a 3D viewer, favourites, folder ZIPs,
-"Open in Bambu Studio" and accounts. Live at **https://models.13thpenthouse.com**. One ASP.NET Core container; the
-library is mounted **read-only** and never written to.
+"Open in <slicer>" and accounts. One ASP.NET Core container, published to GHCR; the library is mounted **read-only**
+and never written to. README.md is the guide for people installing it.
 
 ## Decisions (don't re-litigate)
 
@@ -17,9 +21,13 @@ library is mounted **read-only** and never written to.
 - **Previews come from the 3MF itself** (Bambu Studio's `Metadata/plate_N.png`, MakerWorld photos in
   `Auxiliaries/Model Pictures/`); only STLs and image-less 3MFs are rendered (CPU renderer). Card cover = plate 1.
 - **Plain docker-compose, not Aspire** (the owner's other project uses Aspire; this one deliberately doesn't).
-- **No Docker on the Mac: Podman.** Images are built there for amd64 (the SDK cross-compiles, no emulation) and copied
-  to the VM. Automated builds (GitHub Actions → GHCR) are still open.
-- **Accounts live in the app** (first-run setup from the home network, Users page for admins), not in env vars.
+- **Images from GitHub Actions** (`.github/workflows/build.yml`): tests, then amd64 + arm64 to
+  `ghcr.io/jurjen74/3mf-library` (`latest` from main, `1.2.3`/`1.2` from `v*` tags, `sha-…`). The Dockerfile builds on
+  the build platform and cross-compiles (no emulation). Locally the owner has **Podman, not Docker**.
+- **General compose, settings in `.env`**: `docker-compose.yml` (bind mount `LIBRARY_DIR`, everything else from `.env`
+  with defaults), `compose.nfs.yml` (library from NFS, enabled with `COMPOSE_FILE=docker-compose.yml:compose.nfs.yml`),
+  `.env.example` documents every setting. Keep the three in step with README.md's configuration table.
+- **Accounts live in the app** (first-run setup, Users page for admins), not in env vars.
   Multi-user with an admin flag; optional forced password change for new/reset accounts (default on).
 - **Home network needs no login**; anything through the reverse proxy always does. No public share links yet.
 - **Open in Bambu Studio**: macOS `bambustudioopen://<encoded url>`, Windows/Linux `bambustudio://open?file=<encoded url>`
@@ -37,12 +45,12 @@ library is mounted **read-only** and never written to.
   link. The button is hidden when neither route works.
 - **Local copy on a computer with the library synced** (opt-in per browser: Account → This computer, shown on
   mouse/trackpad devices; `localStorage` `library.openLocalCopy`): the button then fires
-  `threemflib://open?path=<library path>`, handled by a per-OS helper that opens the synced file with Bambu Studio, so
-  saves go back via OneDrive. Library paths on the site equal the paths in the OneDrive folder. Any page can fire that
+  `threemflib://open?path=<library path>`, handled by a per-OS helper that opens the synced file in the slicer, so
+  saves go back via the sync tool. Library paths on the site equal the paths in the synced folder. Any page can fire that
   scheme, so the helpers only open model files inside the configured folder (no `..`, `.`, empty segments, absolute or
   drive paths).
-  - macOS `tools/mac-opener`: built and registered on the owner's Mac (`~/Applications/3MF Library Opener.app`, folder
-    `~/Library/CloudStorage/OneDrive-Personal/3D Print` baked in at build time). Tested end to end, works.
+  - macOS `tools/mac-opener`: `build.sh [folder]` → `~/Applications/3MF Library Opener.app`, folder baked in at build
+    time (default OneDrive's `3D Print`). Tested end to end on the owner's Mac, works.
   - Windows `tools/windows-opener`: `install.ps1` → `%LOCALAPPDATA%\3MF Library Opener` (`open-model.ps1`,
     `launch.vbs`, `config.json`) + `HKCU\Software\Classes\threemflib`. `launch.vbs` hides the console and passes the
     link via the `THREEMFLIB_URL` env var (WshShell.Run expands `%NAME%`). Script logic tested in the
@@ -80,7 +88,7 @@ in the repo — tests build synthetic 3MF/STL in code.
 
 ## Data and migrations
 
-`DATA_PATH` (`/data`, on the VM `/opt/3mf-library/data`):
+`DATA_PATH` (`/data`; `./data` next to the compose file):
 
 - `library.db` — the **index, a cache**. `LibraryDb.SchemaVersion` bump ⇒ drop and rebuild everything (fine).
   `LibraryScanner.IndexerVersion` bump ⇒ every file re-read once (cache keys include it). Search: FTS5 `files_fts`.
@@ -97,45 +105,35 @@ in the repo — tests build synthetic 3MF/STL in code.
 
 - Fallback policy: everything needs an authenticated user except login/setup pages, static assets, `/health`,
   `/manifest.webmanifest` and `/dl/{token}` (token-checked).
-- `TRUSTED_NETWORKS` (192.168.2.0/24): a **direct** visitor from there becomes a "Home network" user. Any request
-  with forwarding headers, or from a `KNOWN_PROXIES` address, is never trusted — NPM sits on the LAN.
+- `TRUSTED_NETWORKS` (e.g. 192.168.1.0/24): a **direct** visitor from there becomes a "Home network" user. Any
+  request with forwarding headers, or from a `KNOWN_PROXIES` address, is never trusted — the proxy sits on the LAN.
 - `KNOWN_PROXIES`: `UseForwardedHeaders` only runs when it's set (an empty list would trust everyone's X-Forwarded-For).
-- First account only via setup from the home network, never through the proxy. Admin rights checked in the DB per
+- First account only via setup, never through a proxy: from `TRUSTED_NETWORKS` when set, otherwise only with the
+  one-time `SetupCode` that is logged at startup (so whoever reaches a fresh site first can't claim it). Admin rights checked in the DB per
   request (not in the cookie). Security stamp in the cookie; password change/reset ends other sessions.
 - Login/setup POSTs are rate-limited per client IP, password changes (`account` policy) per account; the rate
   limiter runs after authentication for that. Previews/meshes are `Cache-Control: private`.
 
-## Environment and infrastructure
+## Deployment
 
-| What | Where |
-|---|---|
-| Library source | OneDrive `3D Print` → Synology Cloud Sync (polls every 600 s; additions, changes and deletions, verified 2026-11-08) → `192.168.2.13:/volume1/3dprinting` (NFS v4.1, read-only export to the VM). A change in OneDrive reaches the site within ~10–14 min (sync interval + settle + 3-min scan) |
-| Docker host | Proxmox VM 130, Debian 13.7, `192.168.2.213` (DHCP reservation `BC:24:11:0E:B7:1D`), user `jurjenladenius`, SSH key-only |
-| App on the VM | `/opt/3mf-library/` → `docker-compose.yml` (copied from the repo), `.env` (`KNOWN_PROXIES=192.168.2.233`, not in git), `data/` |
-| Reverse proxy | Nginx Proxy Manager LXC `192.168.2.233` (reservation `BC:24:11:97:4F:C1`) → `http://192.168.2.213:8085`; Force SSL, HTTP/2, HSTS, Cache Assets off |
-| Router | 80/443 → NPM; port 8085 is not forwarded |
-| Container | port 8085→8080, UID 1000, read-only root fs, no capabilities, NFS volume `library` mounted `:ro`, `mem_limit` `MEMORY_LIMIT` from `.env` (default 3g), `TZ=Europe/Amsterdam` (dates on the site) |
+General: `docker compose up -d` with the image from GHCR and a `.env` (README.md). The owner's server, how it's
+deployed there and its `.env` are in the private notes (`CLAUDE.local.md`); read them before deploying.
 
-Env vars: `LIBRARY_PATH`, `DATA_PATH`, `SCAN_INTERVAL` (00:03:00), `SETTLE_DELAY` (00:00:10), `IGNORE`, `SITE_TITLE`,
-`TRUSTED_NETWORKS`, `KNOWN_PROXIES`, `TZ`. `/health` (anonymous) returns 503 `scan-failed` while scans throw. Inotify doesn't work over NFS, so the indexer polls; Cloud Sync writes files in
-parts, hence the settle delay.
+Env vars the app reads: `LIBRARY_PATH`, `DATA_PATH`, `SCAN_INTERVAL` (00:03:00), `SETTLE_DELAY` (00:00:10), `IGNORE`,
+`SITE_TITLE`, `TRUSTED_NETWORKS`, `KNOWN_PROXIES`, `TZ`; compose adds `LIBRARY_DIR`, `NFS_*`, `PUID`/`PGID`, `PORT`,
+`MEMORY_LIMIT`, `IMAGE`, `PULL_POLICY`. Empty values fall back to the app's defaults. `/health` (anonymous) returns 503
+`scan-failed` while scans throw. Inotify doesn't work over network shares, so the indexer polls; sync tools write files
+in parts, hence the settle delay.
 
 ## Commands
 
 ```bash
 dotnet test Library.slnx                                    # run from the repo root
 dotnet run --project src/Library.Web --launch-profile http   # http://localhost:5180, loopback trusted, ../../dev-library
-rsync -a --delete ~/Library/CloudStorage/OneDrive-Personal/"3D Print/" dev-library/   # refresh the local copy
 ```
 
-Deploy (from the Mac; the VM never builds):
-
-```bash
-podman build --platform linux/amd64 -t 3mf-library:latest .
-podman save localhost/3mf-library:latest | ssh jurjenladenius@192.168.2.213 docker load
-scp docker-compose.yml jurjenladenius@192.168.2.213:/opt/3mf-library/    # only when it changed
-ssh jurjenladenius@192.168.2.213 'cd /opt/3mf-library && docker compose up -d && docker image prune -f'
-```
+`dev-library/` is a git-ignored copy of (part of) a library; the owner refreshes it from their synced folder (see
+`CLAUDE.local.md`). Building an image locally: `podman build --platform linux/amd64 -t 3mf-library:latest .`
 
 Razor views are compiled at build time: restart `dotnet run` after editing `.cshtml`. The browser-pane preview uses
 `.claude/launch.json` (`library-web`).
@@ -161,13 +159,14 @@ Razor views are compiled at build time: restart `dotnet run` after editing `.csh
 
 - Commit only when asked; "commit" and "push" usually come as separate requests. End commit messages with the
   attribution line from the session's system reminder.
-- Deploying to VM 130 over SSH is the established routine for finished features; say so when doing it.
+- Deploying finished features to the owner's server is the established routine (steps in the private notes); it needs
+  the owner's go-ahead each time.
 - Never set or reveal real passwords; test accounts only in the local, git-ignored `data/`.
 
 ## Open items
 
-- Automated builds: GitHub Actions → GHCR, then `docker compose pull` on the VM.
-- Owner to check: VM 130 in the Proxmox backup job; Proxmox firewall rules for VM 130 (8085 from LAN/NPM only,
-  22 from LAN).
-- Optional: share links (signed, expiring, scoped), OIDC login.
-- On the VM, `data/users.db.before-v2` / `before-v3` are pre-migration backups that can be deleted.
+- Licence: none yet (needed before others may use it); then make the repository and the GHCR package public.
+- Before going public: the git history still contains the owner's infrastructure details (removed from the files);
+  consider publishing a fresh repository without that history.
+- Optional: share links (signed, expiring, scoped), OIDC / forward-auth login, a no-login mode, a container health
+  check, downloadable releases of the local-copy helpers.

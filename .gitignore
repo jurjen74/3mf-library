@@ -13,8 +13,12 @@ TestResults/
 # Secrets / local config
 .env
 .env.*
+!.env.example
 appsettings.Local.json
 /data-container/
 
 # Original design notes, kept locally only (decisions now live in CLAUDE.md)
 /PLAN.md
+
+# The owner's own installation details (points to private notes outside the repo)
+/CLAUDE.local.md

@@ -1,121 +1,183 @@
 # 3MF Library
 
-A self-hosted preview site for the 3D print folder. It shows the folders exactly as they are on disk, with a card per
-model using the plate previews Bambu Studio embeds in every 3MF (STLs and bare geometry get a rendered
-preview), a page per file with photos, description and a 3D viewer, search, favourites, downloads (single files or a
-whole folder as ZIP) and an "Open in Bambu Studio" button. It can be installed as an app on a phone's home screen. It's a single ASP.NET Core
-(.NET 10) container that mounts the library **read-only**. See [CLAUDE.md](CLAUDE.md) for decisions, architecture,
-infrastructure and deployment.
+A self-hosted preview site for a folder of 3D print files. Point it at the folder where your 3MF and STL files live
+(on the same machine or on a NAS) and it shows that folder exactly as it is on disk, with a preview for every model:
 
-## Develop
+- **Previews from the files themselves**: the preview images Bambu Studio, OrcaSlicer and PrusaSlicer store in a 3MF
+  (one per plate where the slicer has plates), plus MakerWorld photos. STLs and 3MFs without images get a rendered preview.
+- **A page per file** with all plates, photos, the description, print time, filament and colours, and a **3D viewer**.
+- **Search, sorting and filters**, Recent, favourites, "include subfolders" for big kits.
+- **Downloads** of single files or a whole folder as ZIP, and **Open in your slicer** (Bambu Studio, OrcaSlicer,
+  UltiMaker Cura, Creality Print, ElegooSlicer; PrusaSlicer through the local-copy helper).
+- **Accounts** with an admin, optional "no login at home", light and dark mode, installable as an app on a phone.
 
-`dev-library/` (git-ignored) is a local copy of part of the library. The app indexes it into `data/`.
+It's one small container (ASP.NET Core, .NET 10). The library is mounted **read-only**: the site never changes, moves or
+deletes your files. Organise them in folders as you like; the folders are the only organisation the site uses.
 
-```bash
-dotnet run --project src/Library.Web --launch-profile http   # http://localhost:5180
-```
+## Quick start
 
-```bash
-dotnet test
-```
-
-## Container
-
-Build the image for the Proxmox VM (amd64) on the Mac. The SDK cross-compiles, so nothing is emulated:
+You need Docker with Compose. On the machine that will run the site:
 
 ```bash
-podman build --platform linux/amd64 -t 3mf-library:latest .
+mkdir 3mf-library && cd 3mf-library
+curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/compose.nfs.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/jurjen74/3mf-library/main/.env.example
 ```
 
-To try it locally against `dev-library/`:
+Edit `.env`. The essentials:
+
+- `LIBRARY_DIR`: the folder with your models (or an NFS share, see below).
+- `TRUSTED_NETWORKS`: your home network, e.g. `192.168.1.0/24`. Visitors there need no login. Leave it empty to
+  require a login for everyone.
+- `TZ`: your time zone, e.g. `Europe/Amsterdam`.
+- `PUID`/`PGID`: the user that may read the library (default 1000). Check with `id` or `ls -n` on the library.
+
+Create the data folder for that user and start:
 
 ```bash
-podman compose -f compose.dev.yml up --build   # http://localhost:8085
+mkdir -p data && sudo chown 1000:1000 data    # use your PUID:PGID
+docker compose up -d
 ```
 
-## Deploy to VM 130 (192.168.2.213)
+Open `http://<this machine>:8085`. The first scan reads every file once; large libraries take a few minutes.
+
+### The first account
+
+The site asks you to create the first account, which becomes the admin:
+
+- **With `TRUSTED_NETWORKS` set**, open the site from that network, directly on its own address (not through a
+  proxy).
+- **Without it**, the setup page asks for a **setup code** that is printed in the container log, so nobody who happens
+  to find the site first can claim it:
+
+  ```bash
+  docker logs 3mf-library | grep "setup code"
+  ```
+
+Admins add other people under **Users** (optionally asking them to choose their own password at the first login),
+reset passwords and grant admin rights. Everyone changes their own password under their name in the top bar.
+
+## Library on a NAS (NFS)
+
+Instead of a local folder, the library can come straight from an NFS export (Synology, TrueNAS, Unraid, …). Export the
+folder read-only to the Docker host, then add to `.env`:
 
 ```bash
-podman save localhost/3mf-library:latest | ssh jurjenladenius@192.168.2.213 docker load
+COMPOSE_FILE=docker-compose.yml:compose.nfs.yml
+NFS_SERVER=192.168.1.10
+NFS_EXPORT=/volume1/3d-models
 ```
+
+A folder that is mounted on the host some other way (SMB, a sync client) works with `LIBRARY_DIR` as well. File
+system notifications don't work over network shares, so the site checks for changes every few minutes
+(`SCAN_INTERVAL`) and waits until a new file stops growing before it reads it (`SETTLE_DELAY`); a sync tool that
+writes files in parts is fine.
+
+## Reverse proxy and HTTPS
+
+To use the site away from home, put it behind a reverse proxy with HTTPS (Nginx Proxy Manager, Caddy, Traefik, plain
+nginx): forward to `http://<docker host>:8085` and leave asset caching off. Then set the proxy's IP address in `.env`:
 
 ```bash
-scp docker-compose.yml jurjenladenius@192.168.2.213:/opt/3mf-library/
+KNOWN_PROXIES=192.168.1.20
 ```
+
+The site then sees visitors' real addresses (for the login rate limit) and knows the connection is HTTPS (secure
+cookies). Anything that comes through the proxy **always needs a login**, even when it claims to come from the home
+network; only direct visitors from `TRUSTED_NETWORKS` skip it. Don't forward port 8085 itself to the internet.
+
+## Configuration
+
+Set these in `.env`. Everything is optional.
+
+| Setting | Default | |
+|---|---|---|
+| `LIBRARY_DIR` | `./library` | Folder with the models on the Docker host, mounted read-only |
+| `COMPOSE_FILE`, `NFS_SERVER`, `NFS_EXPORT`, `NFS_VERSION` | – | Library on an NFS share instead (see above; version default 4.1) |
+| `TRUSTED_NETWORKS` | – | `;`-separated networks whose direct visitors need no login, e.g. `192.168.1.0/24` |
+| `KNOWN_PROXIES` | – | Reverse proxy IP address(es) |
+| `PORT` | `8085` | Port on the Docker host |
+| `PUID`, `PGID` | `1000` | User and group the app runs as (reads the library, writes `./data`) |
+| `MEMORY_LIMIT` | `3g` | Memory cap for the container; very large models need room while they're read |
+| `TZ` | `UTC` | Time zone for dates on the site |
+| `SITE_TITLE` | `3D Print library` | Name in the header and the browser tab |
+| `SCAN_INTERVAL` | `00:03:00` | How often the library is checked; only new and changed files are read |
+| `SETTLE_DELAY` | `00:00:10` | A new or changed file is read once its size and time stay the same this long |
+| `IGNORE` | see `.env.example` | `;`-separated name patterns to skip; names starting with a dot are always skipped |
+| `IMAGE`, `PULL_POLICY` | `ghcr.io/jurjen74/3mf-library:latest`, `missing` | Image to run; pin a version (e.g. `:1.0.0`) for predictable updates |
+
+The container itself understands `LIBRARY_PATH` and `DATA_PATH` too (`/library`, `/data`); with Compose you don't need
+them.
+
+## Updating and backups
 
 ```bash
-ssh jurjenladenius@192.168.2.213 'cd /opt/3mf-library && docker compose up -d && docker compose logs --tail 20'
+docker compose pull && docker compose up -d
 ```
 
-The site is at `http://192.168.2.213:8085`. The NFS volume in `docker-compose.yml` mounts
-`192.168.2.13:/volume1/3dprinting` read-only.
+`data/` holds everything the site keeps:
 
-## Accounts and Nginx Proxy Manager
+- `users.db`: accounts and favourites. **Back this up**; updates migrate it in place.
+- `library.db` and `cache/`: the index and the previews, rebuilt from the library whenever needed. To start the index
+  afresh: stop the container, delete `data/library.db*` and `data/cache/`, start again.
+- `keys/`: keys for login cookies and slicer links. Without them everyone just logs in again.
 
-Everything is behind a login, except direct visitors from `TRUSTED_NETWORKS` (the home LAN). A request that arrives
-through a proxy always needs the login, even when it says it comes from the LAN.
+## Slicers and the local copy
 
-**First run:** open the site from the home network (`http://192.168.2.213:8085`) and create the first account on the
-page it shows (or via the "No account yet" banner). Only direct visitors from the home network can do this, never
-through the proxy. Accounts live in `data/users.db` with hashed passwords; change yours under the user name in the top
-bar (this logs out your other devices). Admins manage everyone else under **Users** in the top bar: add people,
-reset a password (both can require the person to choose their own password at the next login, on by default),
-grant or remove admin, delete (resets and deletes end that person's sessions; the last admin
-always stays). Forgot your own password and no other admin? Stop the container, delete `data/users.db`, and set
-up again.
-
-**Proxy host in Nginx Proxy Manager:** forward `http://192.168.2.213:8085`, request a Let's Encrypt certificate
-with Force SSL, keep *Cache Assets* off, and set `KNOWN_PROXIES=<npm-ip>` in `/opt/3mf-library/.env` so the app sees
-the visitor's real address and that the connection is HTTPS (secure cookie, per-visitor rate limit on logins).
-
-## Slicers and the local copy (Mac, Windows)
-
-File pages have an **Open in …** button. Pick the slicer per computer under **Account → This computer** (stored in that
+File pages have an **Open in …** button. Each computer picks its slicer under **Account → This computer** (stored in that
 browser; default Bambu Studio):
 
 | Slicer | Downloads from this site | Local copy (helper) |
 |---|---|---|
 | Bambu Studio | 3MF only (asks once whether to trust the site) | yes |
 | OrcaSlicer | yes (needs a download folder set in OrcaSlicer) | yes |
-| PrusaSlicer | no — it only downloads from Printables/Thingiverse | yes |
+| PrusaSlicer | no, it only downloads from Printables/Thingiverse | yes |
 | UltiMaker Cura | yes | yes |
 | Creality Print | yes | no (downloads instead) |
 | ElegooSlicer | yes | no (downloads instead) |
 
-Link formats follow each slicer's source code and [Manyfold](https://github.com/manyfold3d/manyfold)'s handlers; only
-Bambu Studio has been tried with the real app.
+Link formats follow each slicer's source code and [Manyfold](https://github.com/manyfold3d/manyfold)'s handlers; Bambu
+Studio has been tried with the real app, the others not yet. The button isn't shown on phones and tablets.
 
-If a computer also has the library synced (OneDrive's `3D Print` folder), the slicer can open the **actual file**
-instead of a downloaded copy, so saving updates the original. Install the small helper once, then tick **Open models
-from my local copy** on that computer.
+**Local copy:** if a computer has the same library synced (OneDrive, Dropbox, Syncthing, a mounted share), the slicer
+can open the **actual file** instead of a downloaded copy, so saving updates the original. Install the small helper
+once, then tick **Open models from my local copy** under Account → This computer. The helper only opens model files
+inside the folder you give it.
 
-**Mac:** puts `3MF Library Opener.app` in `~/Applications` and registers `threemflib://` links (pass another folder as
-the first argument if the library lives elsewhere). Uninstall by deleting the app.
+**Mac:** builds `3MF Library Opener.app` in `~/Applications` and registers `threemflib://` links. Pass the local
+library folder (default: `3D Print` in OneDrive). Uninstall by deleting the app.
 
 ```bash
-tools/mac-opener/build.sh
+tools/mac-opener/build.sh "$HOME/path/to/your/library"
 ```
 
 **Windows:** copies the helper to `%LOCALAPPDATA%\3MF Library Opener` and registers `threemflib://` for your user (no
-admin rights). It finds OneDrive's `3D Print` and the installed slicers itself; otherwise pass `-LibraryFolder`,
-`-BambuStudio`, `-OrcaSlicer`, `-PrusaSlicer` or `-Cura`. Run it again after installing another slicer. Uninstall with
-`uninstall.ps1`. On a Mac the helper opens whichever of the four slicers is installed (by app name).
+admin rights). Pass `-LibraryFolder` (default: `3D Print` in OneDrive); it finds the installed slicers itself, or pass
+`-BambuStudio`, `-OrcaSlicer`, `-PrusaSlicer` or `-Cura`. Run it again after installing another slicer; uninstall with
+`uninstall.ps1`.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\windows-opener\install.ps1
+powershell -ExecutionPolicy Bypass -File tools\windows-opener\install.ps1 -LibraryFolder "D:\3D Print"
 ```
 
-## Configuration
+## Development
 
-| Variable | Default | |
-|---|---|---|
-| `LIBRARY_PATH` | `/library` | Library root (read-only) |
-| `DATA_PATH` | `/data` | SQLite index, preview cache, data-protection keys |
-| `SCAN_INTERVAL` | `00:03:00` | How often the library is re-walked; only changed files are re-read |
-| `SETTLE_DELAY` | `00:00:10` | A new or changed file is only read once its size and time stay the same this long (Cloud Sync writes in parts) |
-| `IGNORE` | see `LibraryOptions` | `;`-separated name globs to skip; dotfiles are always skipped |
-| `SITE_TITLE` | `3D Print library` | |
-| `TRUSTED_NETWORKS` | – | `;`-separated networks whose direct visitors need no login, e.g. `192.168.2.0/24` |
-| `KNOWN_PROXIES` | – | Proxy IPs whose `X-Forwarded-For`/`-Proto` are believed (in `.env`) |
+```bash
+dotnet test Library.slnx
+dotnet run --project src/Library.Web --launch-profile http    # http://localhost:5180, indexes ./dev-library
+```
 
-The index is a cache: stop the container, delete `data/library.db*` and `data/cache/`, and the next start rebuilds both.
+`dev-library/` and `data/` are git-ignored: put a copy of some models in `dev-library/`. Locally, `localhost` counts as
+the home network, so no login is needed.
+
+Container images are built by GitHub Actions (`.github/workflows/build.yml`) for amd64 and arm64 on every push to
+`main` (`latest`) and for version tags (`v1.2.3` → `1.2.3`, `1.2`). To build one yourself (Docker or Podman; the .NET
+SDK cross-compiles, so another architecture needs no emulation):
+
+```bash
+docker build --platform linux/amd64 -t 3mf-library:local .
+```
+
+Then set `IMAGE=3mf-library:local` and `PULL_POLICY=never` in `.env`. `compose.dev.yml` runs a local build against
+`dev-library/`. Architecture, decisions and conventions are in [CLAUDE.md](CLAUDE.md).

@@ -6,11 +6,20 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Library.Web.Pages;
 
-/// <summary>First run: create the first account (an admin). Only while no account exists, only from the home network.</summary>
+/// <summary>
+/// First run: create the first account (an admin). Only while no account exists, never through a proxy; from the home
+/// network when <c>TRUSTED_NETWORKS</c> is set, otherwise with the <see cref="Auth.SetupCode"/> from the container log.
+/// </summary>
 [AllowAnonymous]
 [EnableRateLimiting("login")]
-public sealed class SetupModel(UserStore users, LibraryOptions options, ILogger<SetupModel> log) : PageModel
+public sealed class SetupModel(UserStore users, LibraryOptions options, SetupCode setupCode, ILogger<SetupModel> log) : PageModel
 {
+    [BindProperty]
+    public string? Code { get; set; }
+
+    /// <summary>No trusted networks: the setup code from the container log is needed.</summary>
+    public bool CodeRequired { get; private set; }
+
     [BindProperty]
     public string? UserName { get; set; }
 
@@ -48,6 +57,14 @@ public sealed class SetupModel(UserStore users, LibraryOptions options, ILogger<
             return Page();
         }
 
+        if (CodeRequired && !setupCode.Matches(Code))
+        {
+            log.LogWarning("Setup with a wrong setup code from {Address}", HttpContext.Connection.RemoteIpAddress);
+            Error = "That setup code isn't right. It's in the container log (docker logs 3mf-library).";
+            Password = RepeatPassword = null;
+            return Page();
+        }
+
         Error = UserStore.CheckUserName(UserName) ?? UserStore.CheckPassword(Password, RepeatPassword);
         if (Error is not null)
         {
@@ -70,6 +87,7 @@ public sealed class SetupModel(UserStore users, LibraryOptions options, ILogger<
     private void Prepare()
     {
         Allowed = TrustedNetwork.MayRunSetup(HttpContext, options);
+        CodeRequired = SetupCode.IsRequired(options);
         ViewData["Title"] = "Set up";
         ViewData["ShellClass"] = "shell--wide";
         ViewData["Anonymous"] = true;

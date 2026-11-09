@@ -26,7 +26,7 @@ public sealed class LibraryOptions
 
     public string SiteTitle { get; init; } = "3D Print library";
 
-    /// <summary>Networks whose direct (non-proxied) visitors need no login (<c>TRUSTED_NETWORKS</c>, e.g. 192.168.2.0/24).</summary>
+    /// <summary>Networks whose direct (non-proxied) visitors need no login (<c>TRUSTED_NETWORKS</c>, e.g. 192.168.1.0/24).</summary>
     public IReadOnlyList<IPNetwork> TrustedNetworks { get; init; } = [];
 
     /// <summary>Reverse proxies whose X-Forwarded-For/-Proto are believed (<c>KNOWN_PROXIES</c>); never trusted as LAN.</summary>
@@ -71,7 +71,7 @@ public sealed class LibraryOptions
     // Bad network settings stop the app at startup instead of silently opening or closing access.
     private static IPNetwork ParseNetwork(string text) => IPNetwork.TryParse(text, out var network)
         ? network
-        : throw new InvalidOperationException($"TRUSTED_NETWORKS: '{text}' is not a network like 192.168.2.0/24.");
+        : throw new InvalidOperationException($"TRUSTED_NETWORKS: '{text}' is not a network like 192.168.1.0/24.");
 
     private static IPAddress ParseAddress(string text) => IPAddress.TryParse(text, out var address)
         ? address

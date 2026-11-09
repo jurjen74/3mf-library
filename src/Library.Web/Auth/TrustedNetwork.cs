@@ -5,7 +5,7 @@ namespace Library.Web.Auth;
 
 /// <summary>
 /// Lets direct visitors from <see cref="LibraryOptions.TrustedNetworks"/> in without logging in. A request that came
-/// through a proxy never qualifies: Nginx Proxy Manager sits on the LAN, so without this rule every visitor from the
+/// through a proxy never qualifies: a reverse proxy usually sits on the LAN, so without this rule every visitor from the
 /// internet would look local.
 /// </summary>
 public static class TrustedNetwork

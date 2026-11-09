@@ -6,7 +6,7 @@ namespace Library.Web.Pages;
 
 /// <summary>
 /// Shown (status 404) for folders and files that aren't in the library: old links, or something moved or renamed in
-/// OneDrive. Points at the nearest folder that still exists and offers a search for the missing name.
+/// the library folder. Points at the nearest folder that still exists and offers a search for the missing name.
 /// </summary>
 public sealed class NotFoundModel(LibraryQueries queries) : PageModel
 {

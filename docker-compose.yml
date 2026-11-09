@@ -1,34 +1,36 @@
-# Production: VM 130 on Proxmox (192.168.2.213), library from the Synology over NFS (read-only).
-# Lives in /opt/3mf-library on the VM; ./data holds the index and preview cache.
+# 3MF Library: a self-hosted preview site for a folder of 3D print files (3MF, STL), mounted read-only.
+#
+# Settings go in a .env file next to this one: copy .env.example to .env and fill it in. Everything has a default,
+# so the smallest setup is LIBRARY_DIR (where your models are) and, for logins without a password at home,
+# TRUSTED_NETWORKS. A library on an NFS share: see compose.nfs.yml. Full guide: README.md.
 services:
   3mf-library:
-    # Built on the Mac with Podman and copied over (see README); never pulled from a registry.
-    image: localhost/3mf-library:latest
-    pull_policy: never
+    image: ${IMAGE:-ghcr.io/jurjen74/3mf-library:latest}
+    pull_policy: ${PULL_POLICY:-missing}
     container_name: 3mf-library
-    user: "1000:1000"
+    # The user the app runs as: it must be able to read the library and write ./data (create it first:
+    # mkdir data && chown <PUID>:<PGID> data).
+    user: "${PUID:-1000}:${PGID:-1000}"
     ports:
-      - "8085:8080"
-    # Per-server settings in /opt/3mf-library/.env (not in git, not overwritten by deploys):
-    #   KNOWN_PROXIES=<IP of the Nginx Proxy Manager LXC>, once it proxies this site.
-    # Accounts are created in the site itself (first run) and stored in ./data/users.db.
-    env_file:
-      - path: .env
-        required: false
+      - "${PORT:-8085}:8080"
     environment:
-      SITE_TITLE: "3D Print library"
-      # Dates on the site ("Modified", "Added") are shown in this zone; the image has the zone data.
-      TZ: "Europe/Amsterdam"
-      SCAN_INTERVAL: "00:03:00"
-      IGNORE: "datapackage.json;._*;@eaDir;#recycle;#snapshot;Thumbs.db;desktop.ini;*.tmp"
-      # Direct visitors from here need no login. Requests through a proxy always do.
-      TRUSTED_NETWORKS: "192.168.2.0/24"
+      SITE_TITLE: ${SITE_TITLE:-3D Print library}
+      # Dates on the site ("Modified", "Added") are shown in this time zone, e.g. Europe/Amsterdam.
+      TZ: ${TZ:-UTC}
+      # Direct visitors from these networks need no login (e.g. 192.168.1.0/24). Requests through a proxy always do.
+      TRUSTED_NETWORKS: ${TRUSTED_NETWORKS:-}
+      # The reverse proxy's address, so the app sees visitors' real addresses and HTTPS.
+      KNOWN_PROXIES: ${KNOWN_PROXIES:-}
+      # Empty means the built-in default (see README.md).
+      SCAN_INTERVAL: ${SCAN_INTERVAL:-}
+      SETTLE_DELAY: ${SETTLE_DELAY:-}
+      IGNORE: "${IGNORE:-}"
     volumes:
-      - library:/library:ro
+      - ${LIBRARY_DIR:-./library}:/library:ro
       - ./data:/data
     restart: unless-stopped
-    # Keeps a very large model from taking the whole VM: the container stops at this, not the VM, and .NET sizes its
-    # heap to 75% of it. Override with MEMORY_LIMIT in .env (e.g. 6g) if the VM has the room.
+    # Keeps a very large model from taking the whole machine: the container stops at this, and .NET sizes its heap
+    # to 75% of it. Big STLs and 3MFs need room; 3g is plenty for most libraries.
     mem_limit: ${MEMORY_LIMIT:-3g}
     security_opt:
       - no-new-privileges:true
@@ -37,11 +39,3 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-
-volumes:
-  library:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: "addr=192.168.2.13,nfsvers=4.1,ro,soft,timeo=100"
-      device: ":/volume1/3dprinting"

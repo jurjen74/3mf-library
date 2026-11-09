@@ -214,9 +214,37 @@ public sealed partial class AuthTests : IDisposable
         var page = await (await Send(client, "/setup", peer, headers)).Content.ReadAsStringAsync();
         var post = await SetUp(client, "intruder", Password, Password, peer, headers, tokenPage: "/login");
 
-        Assert.Contains("only be created from the home network", page);
+        Assert.Contains("only from the home network", page);
         Assert.Equal(HttpStatusCode.OK, post.StatusCode);
         Assert.False(users.HasUsers());
+    }
+
+    [Fact]
+    public async Task Without_trusted_networks_setup_needs_the_code_from_the_log()
+    {
+        var (client, users) = Site(trustedNetworks: "", withAccount: false);
+        var code = LastFactory.Services.GetRequiredService<SetupCode>();
+
+        Assert.Contains("Setup code", await (await Send(client, "/setup", peer: Outside)).Content.ReadAsStringAsync());
+
+        var missing = await SetUp(client, "jurjen", Password, Password, peer: Outside);
+        var wrong = await SetUp(client, "jurjen", Password, Password, peer: Outside, code: "AAAA-AAAA");
+        Assert.Contains("setup code isn't right", WebUtility.HtmlDecode(await wrong.Content.ReadAsStringAsync()));
+        Assert.Equal(HttpStatusCode.OK, missing.StatusCode);
+        Assert.False(users.HasUsers());
+
+        // Typed by hand: lower case, a space instead of the dash.
+        var created = await SetUp(client, "jurjen", Password, Password, peer: Outside, code: code.Display.ToLowerInvariant().Replace('-', ' '));
+        Assert.Equal("/browse", PathOf(created.Headers.Location!));
+        Assert.True(users.Verify("jurjen", Password)?.IsAdmin);
+    }
+
+    [Fact]
+    public async Task With_trusted_networks_setup_from_home_needs_no_code()
+    {
+        var (client, _) = Site(withAccount: false);
+
+        Assert.DoesNotContain("Setup code", await (await Send(client, "/setup", peer: Lan)).Content.ReadAsStringAsync());
     }
 
     [Theory]
@@ -599,12 +627,13 @@ public sealed partial class AuthTests : IDisposable
     /// another page, e.g. the login page, as an attacker could.
     /// </summary>
     private static async Task<HttpResponseMessage> SetUp(HttpClient client, string user, string password, string repeat, string peer,
-        (string Name, string Value)[]? headers = null, string tokenPage = "/setup")
+        (string Name, string Value)[]? headers = null, string tokenPage = "/setup", string? code = null)
     {
         var page = await Send(client, tokenPage, peer, headers);
         var token = Token(await page.Content.ReadAsStringAsync());
-        return await Post(client, "/setup", peer,
-            [new("UserName", user), new("Password", password), new("RepeatPassword", repeat), new("__RequestVerificationToken", token)], headers);
+        KeyValuePair<string, string>[] form =
+            [new("UserName", user), new("Password", password), new("RepeatPassword", repeat), new("__RequestVerificationToken", token)];
+        return await Post(client, "/setup", peer, code is null ? form : [.. form, new("Code", code)], headers);
     }
 
     private static string Token(string html) => TokenPattern().Match(html) is { Success: true } match
