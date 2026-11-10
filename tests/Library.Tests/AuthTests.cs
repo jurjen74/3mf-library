@@ -359,13 +359,31 @@ public sealed partial class AuthTests : IDisposable
         await LogIn(admin, "jurjen", Password);
 
         await UsersAction(admin, "Add", [new("userName", "Guest"), new("password", "guest password 123"), new("repeatPassword", "guest password 123")]);
-        var duplicate = await UsersAction(admin, "Add", [new("userName", "GUEST"), new("password", "another password"), new("repeatPassword", "another password")]);
+        var duplicate = await UsersForm(admin, "Add", [new("userName", "GUEST"), new("password", "another password"), new("repeatPassword", "another password")]);
 
         var guest = NewClient(LastFactory);
         Assert.Equal("/browse", (await LogIn(guest, "guest", "guest password 123")).Headers.Location?.OriginalString);
         Assert.False(users.Verify("guest", "guest password 123")!.IsAdmin);
         Assert.Contains("already a user called GUEST", WebUtility.HtmlDecode(duplicate));
         Assert.Single(users.List(), u => u.UserName == "Guest");
+    }
+
+    [Fact]
+    public async Task A_problem_in_the_add_user_form_keeps_what_was_entered_except_the_passwords()
+    {
+        var (admin, users) = Site();
+        await LogIn(admin, "jurjen", Password);
+
+        var page = WebUtility.HtmlDecode(await UsersForm(admin, "Add",
+            [new("userName", "robin"), new("password", "first password 1"), new("repeatPassword", "other password 2"), new("isAdmin", "true")]));
+
+        Assert.Contains("don't match", page);
+        Assert.Contains("name=\"userName\" value=\"robin\"", page);
+        Assert.Matches("name=\"isAdmin\" value=\"true\" checked", page);
+        Assert.DoesNotMatch("name=\"mustChangePassword\" value=\"true\" checked", page);   // unticked stays unticked
+        Assert.DoesNotContain("first password 1", page);
+        Assert.DoesNotContain("other password 2", page);
+        Assert.DoesNotContain(users.List(), u => u.UserName == "robin");
     }
 
     [Fact]
@@ -575,6 +593,15 @@ public sealed partial class AuthTests : IDisposable
         var response = await Post(client, $"/users?handler={handler}", Outside, [.. form, new("__RequestVerificationToken", token)]);
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         return await (await Send(client, "/users", Outside)).Content.ReadAsStringAsync();
+    }
+
+    /// <summary>Posts a Users page form that has a problem: the page comes back directly (no redirect), form kept.</summary>
+    private static async Task<string> UsersForm(HttpClient client, string handler, KeyValuePair<string, string>[] form)
+    {
+        var token = Token(await (await Send(client, "/users", Outside)).Content.ReadAsStringAsync());
+        var response = await Post(client, $"/users?handler={handler}", Outside, [.. form, new("__RequestVerificationToken", token)]);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadAsStringAsync();
     }
 
     private static async Task<HttpResponseMessage> ChangePassword(HttpClient client, string current, string next)

@@ -16,6 +16,19 @@ public sealed class UsersModel(UserStore users, ILogger<UsersModel> log) : PageM
     [TempData]
     public string? Error { get; set; }
 
+    /// <summary>
+    /// The "Add a user" form as it was sent, when it had a problem: shown again with the user name and choices kept
+    /// (passwords are never sent back) and the problem next to the form.
+    /// </summary>
+    public NewUserForm NewUser { get; private set; } = new();
+
+    public sealed record NewUserForm(
+        string? UserName = null,
+        bool IsAdmin = false,
+        bool MustChangePassword = true,
+        string? Problem = null,
+        bool PasswordProblem = false);
+
     public IActionResult OnGet() => Load() ?? Page();
 
     public IActionResult OnPostAdd(string? userName, string? password, string? repeatPassword, bool isAdmin, bool mustChangePassword)
@@ -25,15 +38,23 @@ public sealed class UsersModel(UserStore users, ILogger<UsersModel> log) : PageM
             return denied;
         }
 
-        var problem = UserStore.CheckUserName(userName) ?? UserStore.CheckPassword(password, repeatPassword);
-        if (problem is not null)
+        // A problem shows the form again (no redirect), so the admin only has to fix what's wrong.
+        if (UserStore.CheckUserName(userName) is { } nameProblem)
         {
-            return Done(error: problem);
+            NewUser = new(userName, isAdmin, mustChangePassword, nameProblem);
+            return Page();
+        }
+
+        if (UserStore.CheckPassword(password, repeatPassword) is { } passwordProblem)
+        {
+            NewUser = new(userName, isAdmin, mustChangePassword, passwordProblem, PasswordProblem: true);
+            return Page();
         }
 
         if (users.Create(userName!, password!, isAdmin, mustChangePassword) is not { } created)
         {
-            return Done(error: $"There is already a user called {userName!.Trim()}.");
+            NewUser = new(userName, isAdmin, mustChangePassword, $"There is already a user called {userName!.Trim()}.");
+            return Page();
         }
 
         log.LogInformation("'{Admin}' added user '{UserName}' (admin: {IsAdmin})", Me!.UserName, created.UserName, created.IsAdmin);

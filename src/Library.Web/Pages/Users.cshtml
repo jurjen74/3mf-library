@@ -85,27 +85,33 @@
             }
         </ul>
 
-        <section>
+        <section id="add-user">
             <h2 class="section-title">Add a user</h2>
             <form method="post" asp-page-handler="Add" class="login-card add-user">
+                @if (Model.NewUser.Problem is not null)
+                {
+                    <p class="login-error" role="alert">@Model.NewUser.Problem</p>
+                }
                 <label>
                     <span>User name</span>
-                    <input name="userName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" required>
+                    <input name="userName" value="@Model.NewUser.UserName" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" required
+                           autofocus="@(Model.NewUser.Problem is not null && !Model.NewUser.PasswordProblem)">
                 </label>
                 <label>
                     <span>Starting password <small class="muted">(at least @UserStore.MinimumPasswordLength characters)</small></span>
-                    <input name="password" type="password" autocomplete="new-password" minlength="@UserStore.MinimumPasswordLength" required>
+                    <input name="password" type="password" autocomplete="new-password" minlength="@UserStore.MinimumPasswordLength" required
+                           autofocus="@Model.NewUser.PasswordProblem">
                 </label>
                 <label>
                     <span>Password again</span>
                     <input name="repeatPassword" type="password" autocomplete="new-password" minlength="@UserStore.MinimumPasswordLength" required>
                 </label>
                 <label class="remember">
-                    <input type="checkbox" name="mustChangePassword" value="true" checked>
+                    <input type="checkbox" name="mustChangePassword" value="true" checked="@Model.NewUser.MustChangePassword">
                     <span>Must choose a new password at first login</span>
                 </label>
                 <label class="remember">
-                    <input type="checkbox" name="isAdmin" value="true">
+                    <input type="checkbox" name="isAdmin" value="true" checked="@Model.NewUser.IsAdmin">
                     <span>Admin (can manage users)</span>
                 </label>
                 <button type="submit" class="button primary">Add user</button>
