@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Library.Web.Updates;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +30,14 @@ builder.Services.AddSingleton<SetupCode>();
 builder.Services.AddSingleton<SlicerLinks>();
 builder.Services.AddSingleton<FavouriteStore>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexerService>());
+builder.Services.AddHttpClient(UpdateChecker.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("3mf-library");   // GitHub's API requires a User-Agent
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+});
+builder.Services.AddSingleton<UpdateChecker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(options.DataPath, "keys")))
     .SetApplicationName("3mf-library");

@@ -21,6 +21,8 @@ services:
       TRUSTED_NETWORKS: ${TRUSTED_NETWORKS:-}
       # The reverse proxy's address, so the app sees visitors' real addresses and HTTPS.
       KNOWN_PROXIES: ${KNOWN_PROXIES:-}
+      # Once a day, look up the latest release on GitHub and show "x.y.z available" in the footer. "false" to turn off.
+      UPDATE_CHECK: ${UPDATE_CHECK:-}
       # Empty means the built-in default (see README.md).
       SCAN_INTERVAL: ${SCAN_INTERVAL:-}
       SETTLE_DELAY: ${SETTLE_DELAY:-}

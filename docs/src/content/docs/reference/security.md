@@ -50,6 +50,12 @@ The image runs as an unprivileged user with a read-only root file system, no Lin
 `no-new-privileges`, and only `./data` is writable. A memory cap keeps one huge model from affecting the rest of the
 machine.
 
+## Outgoing connections
+
+The site makes one connection to the internet: once a day it fetches the latest release from GitHub's API
+(`api.github.com`) to show "x.y.z available" in the footer. It sends nothing but the request itself; set
+`UPDATE_CHECK=false` to turn it off.
+
 ## Reporting a problem
 
 Found a security issue? Please report it privately through

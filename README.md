@@ -106,6 +106,7 @@ Set these in `.env`. Everything is optional.
 | `MEMORY_LIMIT` | `3g` | Memory cap for the container; very large models need room while they're read |
 | `TZ` | `UTC` | Time zone for dates on the site |
 | `SITE_TITLE` | `3D Print library` | Name in the header and the browser tab |
+| `UPDATE_CHECK` | on | Once a day, look up the latest release on GitHub and show "x.y.z available" in the footer; `false` turns it off |
 | `SCAN_INTERVAL` | `00:03:00` | How often the library is checked; only new and changed files are read |
 | `SETTLE_DELAY` | `00:00:10` | A new or changed file is read once its size and time stay the same this long |
 | `IGNORE` | see `.env.example` | `;`-separated name patterns to skip; names starting with a dot are always skipped |

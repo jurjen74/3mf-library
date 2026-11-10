@@ -3,6 +3,7 @@
 @inject IndexerService Indexer
 @inject LibraryQueries Queries
 @inject UserStore Users
+@inject Library.Web.Updates.UpdateChecker Updates
 @{
     // The login and error pages are shown to visitors who aren't logged in: no library details there.
     var signedIn = User.Identity?.IsAuthenticated == true && ViewData["Anonymous"] is not true;
@@ -120,6 +121,21 @@
                 @if (stats.Errors > 0)
                 {
                     <text> · </text><span class="warn">@Display.Plural(stats.Errors, "file", "files") could not be read</span>
+                }
+                <text> · </text>
+                @{ var version = Library.Web.Updates.AppVersion.Current; }
+                @if (version.IsRelease)
+                {
+                    <a class="footer-version" href="https://github.com/@(Library.Web.Updates.UpdateChecker.Repository)/releases/tag/v@(version)"
+                       title="3MF Library @version: what's in it">v@(version)</a>
+                }
+                else
+                {
+                    <span class="footer-version" title="3MF Library @version">@(version.Release is null ? version.Text : "v" + version.Text)</span>
+                }
+                @if (Updates.Available is { } update)
+                {
+                    <text> · </text><a class="footer-update" href="@update.Url" title="What's new in @update.Version">@update.Version available</a>
                 }
             </span>
             <form method="post" asp-page="/Browse" asp-page-handler="Rescan" asp-route-path="">

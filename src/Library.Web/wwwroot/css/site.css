@@ -1402,6 +1402,17 @@ body:has(.login-page) .footer { border-top-color: transparent; }
 .empty-state--compact h2 { font-size: 1.25rem; margin: 0.9rem 0 0.4rem; }
 .empty-state--compact .empty-state-icon { width: 64px; height: 64px; }
 
+/* Version in the footer, and a newer release when there is one. */
+.footer-version { color: inherit; font-variant-numeric: tabular-nums; }
+a.footer-version:hover { color: var(--text); }
+.footer-update {
+  font-weight: 600;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+.footer-update:hover { text-decoration: none; filter: brightness(0.97); }
+
 @media (prefers-reduced-motion: reduce) {
   @view-transition { navigation: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; }

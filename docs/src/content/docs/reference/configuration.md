@@ -48,6 +48,7 @@ See [Reverse proxy and HTTPS](/guides/reverse-proxy/) and [Security](/reference/
 |---|---|---|
 | `SITE_TITLE` | `3D Print library` | Name in the header, the browser tab and the installed app |
 | `TZ` | `UTC` | Time zone for dates on the site, e.g. `Europe/Amsterdam` |
+| `UPDATE_CHECK` | on | Once a day, ask GitHub for the latest release and show "x.y.z available" in the footer when it's newer. `false` turns it off. |
 
 ## Inside the container
 

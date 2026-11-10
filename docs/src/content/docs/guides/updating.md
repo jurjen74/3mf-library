@@ -3,6 +3,16 @@ title: Updating and backups
 description: Update to a new version, pin versions, and what to back up.
 ---
 
+## Which version am I running?
+
+The footer of every page shows the version, for example **v1.0.1**; click it for that version's release notes. Once a
+day the site asks GitHub for the latest release, and when there's a newer one the footer says so: **1.0.2 available**,
+linking to what's new. Builds from the main branch show something like `v1.0.1-3-gabc1234` (three changes after
+1.0.1).
+
+The check only fetches the latest release number from GitHub; nothing about your site or library is sent. To turn it
+off, set `UPDATE_CHECK=false` in `.env` and run `docker compose up -d`.
+
 ## Updating
 
 ```bash

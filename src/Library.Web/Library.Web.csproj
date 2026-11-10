@@ -3,6 +3,9 @@
   <PropertyGroup>
     <RootNamespace>Library.Web</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- The image build passes the release version (git describe); local builds are "dev" and never check for updates. -->
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">dev</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -41,5 +41,6 @@ within the hour.
 
 ## What isn't used
 
-The site doesn't slice, convert or change files, and doesn't read G-code. It doesn't need network access: everything
-comes from the files themselves.
+The site doesn't slice, convert or change files, and doesn't read G-code. Everything it shows comes from the files
+themselves. The only thing it fetches from the internet is the latest release number, once a day, to tell you about
+updates; `UPDATE_CHECK=false` turns that off.

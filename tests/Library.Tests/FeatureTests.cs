@@ -187,6 +187,16 @@ public sealed partial class FeatureTests : IDisposable
     }
 
     [Fact]
+    public async Task The_footer_shows_the_version()
+    {
+        var page = await Page(Client(), "/browse", Lan);
+
+        // Test builds are "dev": shown, but never compared with GitHub's releases.
+        Assert.Contains("class=\"footer-version\" title=\"3MF Library dev\">dev</span>", page);
+        Assert.DoesNotContain("footer-update", page);
+    }
+
+    [Fact]
     public async Task Include_subfolders_shows_every_model_below_a_folder_with_its_subfolder()
     {
         var client = Client();

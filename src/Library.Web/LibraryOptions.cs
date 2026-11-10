@@ -32,6 +32,9 @@ public sealed class LibraryOptions
     /// <summary>Reverse proxies whose X-Forwarded-For/-Proto are believed (<c>KNOWN_PROXIES</c>); never trusted as LAN.</summary>
     public IReadOnlyList<IPAddress> KnownProxies { get; init; } = [];
 
+    /// <summary>Check GitHub once a day for a newer release (<c>UPDATE_CHECK</c>, default on).</summary>
+    public bool UpdateCheck { get; init; } = true;
+
     public string CachePath => Path.Combine(DataPath, "cache");
 
     public string DatabasePath => Path.Combine(DataPath, "library.db");
@@ -62,6 +65,7 @@ public sealed class LibraryOptions
             SiteTitle = config["SITE_TITLE"] is { Length: > 0 } title ? title : "3D Print library",
             TrustedNetworks = SplitList(config["TRUSTED_NETWORKS"]).Select(ParseNetwork).ToList(),
             KnownProxies = SplitList(config["KNOWN_PROXIES"]).Select(ParseAddress).ToList(),
+            UpdateCheck = config["UPDATE_CHECK"]?.Trim().ToLowerInvariant() is not ("false" or "0" or "no" or "off"),
         };
     }
 

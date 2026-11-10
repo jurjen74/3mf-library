@@ -25,6 +25,8 @@ settings change, update both (and re-run the screenshot script when the UI chang
 - **Images from GitHub Actions** (`.github/workflows/build.yml`): tests, then amd64 + arm64 to
   `ghcr.io/jurjen74/3mf-library` (`latest` from main, `1.2.3`/`1.2` from `v*` tags, `sha-…`). The Dockerfile builds on
   the build platform and cross-compiles (no emulation). Locally the owner has **Podman, not Docker**.
+- **Versions:** release = tag `vX.Y.Z` + GitHub release (owner's go-ahead); CI passes `git describe` as the `VERSION`
+  build arg, shown in the footer. Only release builds (and main builds after a release) check GitHub for updates.
 - **General compose, settings in `.env`**: `docker-compose.yml` (bind mount `LIBRARY_DIR`, everything else from `.env`
   with defaults), `compose.nfs.yml` (library from NFS, enabled with `COMPOSE_FILE=docker-compose.yml:compose.nfs.yml`),
   `.env.example` documents every setting. Keep the three in step with README.md's configuration table.
@@ -70,6 +72,8 @@ src/Library.Web/
   Meshes/               StlReader, ThreeMfMeshReader (core + Production ext + plates + paint), MeshRenderer (CPU),
                         PngWriter, MeshSimplifier (vertex clustering), MeshCodec (viewer format "M3M1"), MeshService,
                         MeshWorkGate (one full mesh load at a time, viewer and indexer together: memory)
+  Updates/              AppVersion (InformationalVersion from the image build: `git describe`, "dev" locally),
+                        UpdateChecker (daily GitHub latest-release lookup → "x.y.z available" in the footer)
   Data/                 LibraryDb (index schema), LibraryQueries, Records
   Auth/                 UserStore (users.db), FavouriteStore, Session (cookie, security stamp, forced change), TrustedNetwork
   Pages/                Browse, File, Search, Recent, Favourites, Login, Setup, Account, Users, Logout, Error
@@ -124,7 +128,7 @@ General: `docker compose up -d` with the image from GHCR and a `.env` (README.md
 deployed there and its `.env` are in the private notes (`CLAUDE.local.md`); read them before deploying.
 
 Env vars the app reads: `LIBRARY_PATH`, `DATA_PATH`, `SCAN_INTERVAL` (00:03:00), `SETTLE_DELAY` (00:00:10), `IGNORE`,
-`SITE_TITLE`, `TRUSTED_NETWORKS`, `KNOWN_PROXIES`, `TZ`; compose adds `LIBRARY_DIR`, `NFS_*`, `PUID`/`PGID`, `PORT`,
+`SITE_TITLE`, `TRUSTED_NETWORKS`, `KNOWN_PROXIES`, `TZ`, `UPDATE_CHECK` (default on); compose adds `LIBRARY_DIR`, `NFS_*`, `PUID`/`PGID`, `PORT`,
 `MEMORY_LIMIT`, `IMAGE`, `PULL_POLICY`. Empty values fall back to the app's defaults. `/health` (anonymous) returns 503
 `scan-failed` while scans throw. Inotify doesn't work over network shares, so the indexer polls; sync tools write files
 in parts, hence the settle delay.
