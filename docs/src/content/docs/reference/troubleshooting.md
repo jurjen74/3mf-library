@@ -45,6 +45,13 @@ can't be shown in 3D, but downloads normally. If the container restarts while lo
 - Everyone behind the proxy hits the rate limit at once? Then the site sees every visitor as the proxy: set
   `KNOWN_PROXIES`.
 
+## The home network still has to log in
+
+`TRUSTED_NETWORKS` only works when the site sees visitors' real addresses. Behind a proxy it never applies (on
+purpose). With Docker Desktop or Podman on a Mac or Windows PC, every visitor arrives from the same internal
+address, so it can't work there; see [Mac or Windows PC](/install/desktop/#logins-and-the-home-network). On a
+Linux server, check the address the site sees in the log line of a failed login.
+
 ## The setup page says I can't create an account here
 
 The first account can't be made through a proxy. Open `http://<server>:8085` directly, from the home network if

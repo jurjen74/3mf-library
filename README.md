@@ -19,9 +19,11 @@ deletes your files. Organise them in folders as you like; the folders are the on
 
 ## Quick start
 
-Step-by-step guides for Linux, Synology, Unraid, TrueNAS SCALE, Raspberry Pi, Proxmox, Portainer and a VPS are on
+Step-by-step guides for Linux, Mac and Windows (Docker Desktop), Synology, Unraid, TrueNAS SCALE, Raspberry Pi,
+Proxmox, Portainer and a VPS are on
 [www.3mf-library.com/install/overview](https://www.3mf-library.com/install/overview/). The short version: you need
-Docker with Compose. On the machine that will run the site:
+Docker with Compose. On the machine that will run the site (Linux; on a Mac or Windows PC, follow
+[that guide](https://www.3mf-library.com/install/desktop/)):
 
 ```bash
 mkdir 3mf-library && cd 3mf-library

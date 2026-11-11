@@ -10,6 +10,7 @@ guide for the machine you have:
 | You have | Guide | Good to know |
 |---|---|---|
 | A Linux server or PC (Debian, Ubuntu, Fedora …) | [Docker Compose on Linux](/install/linux/) | The reference setup; the other guides build on it |
+| Your own Mac or Windows PC | [Mac or Windows PC](/install/desktop/) | Docker Desktop; everyone logs in, online while the computer is |
 | A Synology NAS | [Synology](/install/synology/) | Container Manager, models straight from a shared folder |
 | An Unraid server | [Unraid](/install/unraid/) | Docker tab, no plugins needed |
 | A TrueNAS SCALE system | [TrueNAS SCALE](/install/truenas/) | Custom app from YAML |

@@ -1,0 +1,190 @@
+---
+title: Mac or Windows PC
+description: Run 3MF Library on your own Mac or Windows PC with Docker Desktop, for example on a folder that OneDrive, Dropbox or iCloud keeps in sync.
+---
+
+import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+The easiest way to try 3MF Library, or to run it for yourself, is on the computer where your models already are.
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) runs the container in a small hidden virtual machine,
+which changes a few things compared to [a Linux server](/install/linux/):
+
+- **No user ids.** Docker Desktop gives the container access to your folders itself: no `chown`, no `PUID`/`PGID`.
+- **Everyone logs in.** Every visitor reaches the site from Docker Desktop's internal address, so the site can't tell
+  your home network from anywhere else. Leave `TRUSTED_NETWORKS` empty (see [below](#logins-and-the-home-network)).
+- **It runs while your computer does.** When the computer sleeps or Docker Desktop is closed, the site is offline.
+
+<Steps>
+
+1. **Install Docker Desktop** from [docker.com](https://www.docker.com/products/docker-desktop/) and start it once.
+   On Windows, keep the default "Use WSL 2" option. Then check in a terminal (Terminal on a Mac, PowerShell on
+   Windows):
+
+   ```bash
+   docker compose version
+   ```
+
+2. **Make a folder for the site and download the files.**
+
+   <Tabs syncKey="os">
+   <TabItem label="Mac">
+   ```bash
+   mkdir -p ~/3mf-library && cd ~/3mf-library
+   curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/docker-compose.yml
+   curl -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/compose.nfs.yml
+   curl -fsSL -o .env https://raw.githubusercontent.com/jurjen74/3mf-library/main/.env.example
+   mkdir data
+   ```
+   </TabItem>
+   <TabItem label="Windows">
+   In PowerShell (type `curl.exe`, not `curl`: in PowerShell, `curl` is something else):
+
+   ```powershell
+   mkdir $HOME\3mf-library; cd $HOME\3mf-library
+   curl.exe -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/docker-compose.yml
+   curl.exe -fsSLO https://raw.githubusercontent.com/jurjen74/3mf-library/main/compose.nfs.yml
+   curl.exe -fsSL -o .env https://raw.githubusercontent.com/jurjen74/3mf-library/main/.env.example
+   mkdir data
+   ```
+   </TabItem>
+   </Tabs>
+
+3. **Edit `.env`** (`open -e .env` on a Mac, `notepad .env` on Windows) and set where your models are. Use quotes
+   when the path has spaces:
+
+   <Tabs syncKey="os">
+   <TabItem label="Mac">
+   ```bash
+   LIBRARY_DIR="/Users/you/Library/CloudStorage/OneDrive-Personal/3D Print"
+   TRUSTED_NETWORKS=
+   TZ=Europe/Amsterdam
+   ```
+
+   Folders under `/Users` are shared with Docker Desktop by default. For a folder elsewhere (an external drive),
+   add it under Docker Desktop → Settings → Resources → File sharing. If macOS asks whether Docker may access the
+   folder, allow it.
+   </TabItem>
+   <TabItem label="Windows">
+   ```bash
+   LIBRARY_DIR="C:/Users/you/OneDrive/3D Print"
+   TRUSTED_NETWORKS=
+   TZ=Europe/Amsterdam
+   ```
+
+   Write the path with forward slashes. Any drive works (`D:/3D Print`).
+   </TabItem>
+   </Tabs>
+
+   All other settings: [Configuration](/reference/configuration/).
+
+4. **Start it** and watch the first scan:
+
+   ```bash
+   docker compose up -d
+   docker compose logs -f
+   ```
+
+   A line like `Scan finished in 42.0s: 812 files in 96 folders` means it's done. `Ctrl+C` stops watching, not the
+   site.
+
+5. **Get the setup code.** With `TRUSTED_NETWORKS` empty, the first account needs the one-time code from the log:
+
+   <Tabs syncKey="os">
+   <TabItem label="Mac">
+   ```bash
+   docker compose logs | grep "setup code"
+   ```
+   </TabItem>
+   <TabItem label="Windows">
+   ```powershell
+   docker compose logs | Select-String "setup code"
+   ```
+   </TabItem>
+   </Tabs>
+
+6. **Open the site** at [http://localhost:8085](http://localhost:8085) and
+   [create the first account](/start/first-account/) with that code.
+
+</Steps>
+
+## Synced folders (OneDrive, Dropbox, iCloud)
+
+A sync tool may keep only placeholders on your computer and download a file when you open it. The container can't
+always trigger that download, so make sure the whole library is really on the disk:
+
+- **OneDrive:** right-click the folder → **Always keep on this device**.
+- **Dropbox:** right-click the folder → **Make available offline**.
+- **iCloud Drive (Mac):** right-click the folder → **Keep Downloaded**.
+
+Files that can't be read show "Could not read" on the site and are tried again within the hour. Changes made by the
+sync tool appear on the site within a few minutes, like on a server.
+
+## Logins and the home network
+
+On a server, `TRUSTED_NETWORKS` lets people at home in without a login. With Docker Desktop that doesn't work:
+the site sees every visitor, from this computer, from your phone or from anywhere else, as the same internal address
+of Docker Desktop's virtual machine. Your home network's range never matches, so setting it has no effect.
+
+<Aside type="caution" title="Don't trust Docker's own network">
+Don't put Docker Desktop's internal range in `TRUSTED_NETWORKS` to skip the login: then everyone who can reach the
+port is let in without a password, including anyone your router or a tunnel lets through.
+</Aside>
+
+Log in once with **Keep me logged in** and the browser stays logged in for 30 days.
+
+## Other devices at home
+
+Docker Desktop makes the site available on your computer's network address too, so a phone or tablet on the same
+Wi-Fi can open `http://<computer address>:8085`. Find the address in System Settings → Wi-Fi → Details (Mac) or with
+`ipconfig` (Windows). Allow Docker through the firewall if your computer asks.
+
+To keep the site to this computer only, set this in `.env` and run `docker compose up -d`:
+
+```bash
+PORT=127.0.0.1:8085
+```
+
+## Starting with the computer
+
+The container has `restart: unless-stopped`, so it comes back whenever Docker Desktop starts. Turn on
+**Start Docker Desktop when you sign in** under Docker Desktop → Settings → General to have the site ready after a
+restart.
+
+Docker Desktop gives its virtual machine a limited amount of memory (Settings → Resources). The site needs about
+250 MB, plus a few GB for a moment when it opens a very large model in the 3D viewer.
+
+## Slicers and the local copy
+
+**Open in your slicer** works as on any other setup. Because the library is already on this computer, the
+[local-copy helper](/guides/local-copy/) fits especially well: the slicer then opens and saves the real file in your
+synced folder, not a downloaded copy.
+
+## Everyday commands
+
+Run these in the site's folder (`~/3mf-library` or `$HOME\3mf-library`):
+
+```bash
+docker compose logs --tail 50        # what's going on
+docker compose pull                  # update: download the new version...
+docker compose up -d                 # ...and start it
+docker compose down                  # stop the site (accounts and previews stay)
+```
+
+Docker Desktop's **Containers** page shows the same container, with its log and start and stop buttons.
+
+<Aside type="note" title="Podman Desktop">
+[Podman Desktop](https://podman-desktop.io) runs the same image. The behaviour described here (no user ids, one
+internal address for every visitor, synced folders) was checked with Podman on a Mac. The Windows steps follow
+Docker Desktop's documentation; if something works differently for you, please
+[open an issue](https://github.com/jurjen74/3mf-library/issues).
+</Aside>
+
+## Uninstall
+
+```bash
+docker compose down
+docker image rm ghcr.io/jurjen74/3mf-library:latest
+```
+
+Then delete the site's folder (`~/3mf-library` or `$HOME\3mf-library`). That removes the accounts and previews; your
+models are untouched.

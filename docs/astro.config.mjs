@@ -31,6 +31,7 @@ export default defineConfig({
           items: [
             { label: 'Choose your setup', slug: 'install/overview' },
             { label: 'Docker Compose on Linux', slug: 'install/linux' },
+            { label: 'Mac or Windows PC', slug: 'install/desktop' },
             { label: 'Synology', slug: 'install/synology' },
             { label: 'Unraid', slug: 'install/unraid' },
             { label: 'TrueNAS SCALE', slug: 'install/truenas' },
