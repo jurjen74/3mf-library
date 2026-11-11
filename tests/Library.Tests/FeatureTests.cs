@@ -35,6 +35,7 @@ public sealed partial class FeatureTests : IDisposable
         Write(library, "Kits/Robot/datapackage.json", "{}"u8.ToArray());
         Write(library, "Kits/Robot Mini/arm.stl", TestMeshes.BinaryStl());
         Write(library, "Lamp.3mf", TestThreeMf.Bambu());
+        Write(library, "Gallery/print.png", [0x89, 0x50, 0x4E, 0x47]);
 
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
         {
@@ -107,6 +108,45 @@ public sealed partial class FeatureTests : IDisposable
         var token = url.Segments[2].TrimEnd('/');
         Assert.Equal(HttpStatusCode.NotFound, (await Send(slicer, $"/dl/{token[..^4]}AAAA/torso.3mf", Outside)).StatusCode);
         Assert.Equal(HttpStatusCode.Redirect, (await Send(slicer, "/download/Lamp.3mf", Outside)).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_browse_only_account_sees_the_library_but_cannot_take_files_away()
+    {
+        var users = _factory.Services.GetRequiredService<UserStore>();
+        users.CreateFirstAdmin("admin", Password);
+        var viewerId = users.Create("viewer", Password, isAdmin: false, canDownload: false)!.Id;
+        var viewer = Client();
+        await LogIn(viewer, "viewer", Password);
+        var mesh = MeshPattern().Match(await Page(Client(), "/file/Lamp.3mf", Lan)).Groups[1].Value;
+
+        var filePage = await Page(viewer, "/file/Lamp.3mf");
+        var folderPage = await Page(viewer, "/browse/Kits/Robot");
+        var accountPage = await Page(viewer, "/account");
+        string[] refused = ["/download/Lamp.3mf", "/download/Kits/Robot/readme.txt", "/zip/Kits/Robot", "/slicer-link/Lamp.3mf", mesh];
+        var statuses = new List<HttpStatusCode>();
+        foreach (var url in refused)
+        {
+            statuses.Add((await Send(viewer, url, Outside)).StatusCode);
+        }
+
+        Assert.StartsWith("/mesh/", mesh);
+        Assert.Contains("/img/", filePage);
+        Assert.DoesNotContain("data-mesh=\"/mesh", filePage);   // Razor keeps empty data- attributes
+        Assert.DoesNotContain("slicer-button", filePage);
+        Assert.DoesNotContain("/download/", filePage);
+        Assert.Contains("readme.txt", folderPage);
+        Assert.DoesNotContain("/download/", folderPage);
+        Assert.DoesNotContain("/zip/", folderPage);
+        Assert.DoesNotContain("this-computer", accountPage);
+        Assert.All(statuses, status => Assert.Equal(HttpStatusCode.Forbidden, status));
+        Assert.Equal(HttpStatusCode.OK, (await Send(viewer, "/download/Gallery/print.png", Outside)).StatusCode);
+
+        // Allowed again: applies from the next request, without logging in again.
+        users.SetCanDownload(viewerId, true);
+        Assert.Equal(HttpStatusCode.OK, (await Send(viewer, "/download/Lamp.3mf", Outside)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Send(viewer, mesh, Outside)).StatusCode);
+        Assert.Contains("/zip/Kits/Robot", await Page(viewer, "/browse/Kits/Robot"));
     }
 
     [Fact]
@@ -282,6 +322,9 @@ public sealed partial class FeatureTests : IDisposable
 
     [GeneratedRegex("class=\"card-thumb\" href=\"([^\"]+)\"")]
     private static partial Regex CardPattern();
+
+    [GeneratedRegex("data-mesh=\"(/mesh/[^\"]+)\"")]
+    private static partial Regex MeshPattern();
 
     private HttpClient Client() =>
         _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });

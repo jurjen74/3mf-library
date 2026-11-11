@@ -44,7 +44,7 @@
 
         <div class="folder-head">
             <h1>@(isRoot ? "Library" : Model.FolderName)</h1>
-            @if (Model.Totals.Files > 0)
+            @if (Model.Totals.Files > 0 && Session.CanDownload(HttpContext))
             {
                 <a class="button" href="@Display.ZipUrl(Model.FolderPath)" download
                    title="Everything in this folder and its sub-folders as one ZIP"
@@ -140,7 +140,7 @@
                             }
                             @{ var shownName = Model.IncludeSubfolders && Model.FolderPath.Length > 0 ? file.Path[(Model.FolderPath.Length + 1)..] : Model.IncludeSubfolders ? file.Path : file.Name; }
                             <a class="file-list-name" href="@Display.FileUrl(file.Path)" title="@shownName">@shownName</a>
-                            <a class="download" href="@Display.DownloadUrl(file.Path)" download title="Download @file.Name">@Display.Size(file.Size)</a>
+                            <partial name="_FileSize" model="file" />
                         </li>
                     }
                 </ul>

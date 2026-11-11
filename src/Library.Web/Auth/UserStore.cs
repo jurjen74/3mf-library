@@ -22,9 +22,13 @@ public sealed class UserSummary
     public long CreatedAt { get; init; }
     public long? LastLoginAt { get; init; }
     public long MustChange { get; init; }
+    public long Download { get; init; } = 1;
 
     public bool IsAdmin => Admin != 0;
     public bool MustChangePassword => MustChange != 0;
+
+    /// <summary>False for a browse-only account (admins can always download).</summary>
+    public bool CanDownload => Download != 0;
     public DateTimeOffset Created => DateTimeOffset.FromUnixTimeMilliseconds(CreatedAt);
     public DateTimeOffset? LastLogin => LastLoginAt is { } at ? DateTimeOffset.FromUnixTimeMilliseconds(at) : null;
 }
@@ -37,8 +41,15 @@ public sealed class AppUser
     public long Admin { get; init; }
     public string SecurityStamp { get; init; } = "";
     public long MustChange { get; init; }
+    public long Download { get; init; } = 1;
 
     public bool IsAdmin => Admin != 0;
+
+    /// <summary>
+    /// False for a browse-only account: it sees everything but can't download files or folders, open them in a
+    /// slicer or load the 3D viewer. Admins can always download, whatever this says.
+    /// </summary>
+    public bool CanDownload => Download != 0 || IsAdmin;
 
     /// <summary>Set for a starting or reset password: the user must choose their own before doing anything else.</summary>
     public bool MustChangePassword => MustChange != 0;
@@ -96,6 +107,7 @@ public sealed partial class UserStore
                 PRIMARY KEY (owner_id, path)
             );
             """,
+            "ALTER TABLE users ADD COLUMN can_download INTEGER NOT NULL DEFAULT 1;",
         ];
 
         using var connection = Open();
@@ -166,18 +178,19 @@ public sealed partial class UserStore
     }
 
     /// <summary>Adds an account; null when the user name is taken (names are case-insensitive).</summary>
-    public AppUser? Create(string userName, string password, bool isAdmin, bool mustChangePassword = false)
+    public AppUser? Create(string userName, string password, bool isAdmin, bool mustChangePassword = false, bool canDownload = true)
     {
         using var connection = Open();
         var id = connection.ExecuteScalar<long?>("""
-            INSERT INTO users (user_name, password_hash, is_admin, security_stamp, created_at, must_change_password)
-            VALUES (@name, @hash, @admin, @stamp, @now, @mustChange)
+            INSERT INTO users (user_name, password_hash, is_admin, security_stamp, created_at, must_change_password, can_download)
+            VALUES (@name, @hash, @admin, @stamp, @now, @mustChange, @download)
             ON CONFLICT (user_name) DO NOTHING
             RETURNING id
             """, new
             {
                 name = userName.Trim(), hash = Hasher.HashPassword(new AppUser(), password), admin = isAdmin ? 1 : 0,
                 stamp = NewStamp(), now = Now(), mustChange = mustChangePassword ? 1 : 0,
+                download = canDownload ? 1 : 0,
             });
         return id is null ? null : FindById(id.Value);
     }
@@ -186,7 +199,7 @@ public sealed partial class UserStore
     {
         using var connection = Open();
         return connection.Query<UserSummary>(
-            "SELECT id, user_name, is_admin AS admin, created_at, last_login_at, must_change_password AS must_change FROM users ORDER BY user_name COLLATE NOCASE")
+            "SELECT id, user_name, is_admin AS admin, created_at, last_login_at, must_change_password AS must_change, can_download AS download FROM users ORDER BY user_name COLLATE NOCASE")
             .AsList();
     }
 
@@ -209,6 +222,14 @@ public sealed partial class UserStore
             WHERE id = @id AND (@admin = 1 OR {NotLastAdmin})
             """, new { id, admin = admin ? 1 : 0 });
         return changed == 1 ? UserChange.Done : Explain(connection, id);
+    }
+
+    /// <summary>Allows or stops downloads for an account (browse only); applies from its next request.</summary>
+    public bool SetCanDownload(long id, bool canDownload)
+    {
+        using var connection = Open();
+        return connection.Execute("UPDATE users SET can_download = @download WHERE id = @id",
+            new { id, download = canDownload ? 1 : 0 }) == 1;
     }
 
     /// <summary>Removes an account (its sessions end on their next request); the last admin can't be removed.</summary>
@@ -262,7 +283,7 @@ public sealed partial class UserStore
         _ => null,
     };
 
-    private const string Columns = "id, user_name, password_hash, is_admin AS admin, security_stamp, must_change_password AS must_change";
+    private const string Columns = "id, user_name, password_hash, is_admin AS admin, security_stamp, must_change_password AS must_change, can_download AS download";
 
     private SqliteConnection Open()
     {

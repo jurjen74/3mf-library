@@ -81,7 +81,7 @@
                         <li>
                             <span class="file-icon kind--@file.Kind">@(System.IO.Path.GetExtension(file.Name).TrimStart('.').ToUpperInvariant())</span>
                             <a class="file-list-name" href="@Display.FileUrl(file.Path)" title="@file.Path">@file.Path</a>
-                            <a class="download" href="@Display.DownloadUrl(file.Path)" download title="Download @file.Name">@Display.Size(file.Size)</a>
+                            <partial name="_FileSize" model="file" />
                         </li>
                     }
                 </ul>

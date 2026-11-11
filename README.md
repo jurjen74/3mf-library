@@ -9,7 +9,8 @@ A self-hosted preview site for a folder of 3D print files. Point it at the folde
 - **Search, sorting and filters**, Recent, favourites, "include subfolders" for big kits.
 - **Downloads** of single files or a whole folder as ZIP, and **Open in your slicer** (Bambu Studio, OrcaSlicer,
   UltiMaker Cura, Creality Print, ElegooSlicer; PrusaSlicer through the local-copy helper).
-- **Accounts** with an admin, optional "no login at home", light and dark mode, installable as an app on a phone.
+- **Accounts** with an admin, browse-only accounts (no downloads), optional "no login at home", light and dark mode,
+  installable as an app on a phone.
 
 **Documentation, with screenshots: [www.3mf-library.com](https://www.3mf-library.com)**
 
@@ -60,7 +61,8 @@ The site asks you to create the first account, which becomes the admin:
   ```
 
 Admins add other people under **Users** (optionally asking them to choose their own password at the first login),
-reset passwords and grant admin rights. Everyone changes their own password under their name in the top bar.
+reset passwords, grant admin rights and make accounts **browse only** (they see everything but can't download,
+open files in a slicer or use the 3D view). Everyone changes their own password under their name in the top bar.
 
 ## Library on a NAS (NFS)
 

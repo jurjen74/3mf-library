@@ -1,0 +1,10 @@
+@model FileRow
+@* The size of a file in a list: a download link, or plain text for a browse-only account. *@
+@if (Session.CanDownload(Context))
+{
+    <a class="download" href="@Display.DownloadUrl(Model.Path)" download title="Download @Model.Name">@Display.Size(Model.Size)</a>
+}
+else
+{
+    <span class="file-size">@Display.Size(Model.Size)</span>
+}

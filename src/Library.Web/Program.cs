@@ -242,6 +242,12 @@ app.MapGet("/mesh/{key}/{name}.bin", async (string key, string name, MeshService
         return Results.NotFound();
     }
 
+    // The viewer's mesh is a printable copy of the model, so browse-only accounts don't get it.
+    if (!Session.CanDownload(context))
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+
     var result = await meshes.GetAsync(key, name, cancellationToken);
     if (result.Error is not null)
     {
@@ -264,6 +270,11 @@ app.MapGet("/slicer-link/{**path}", (string? path, HttpContext context, LibraryQ
     if (!LibraryPaths.TryNormalize(path, out var relative) || queries.FindFile(relative) is not { } file || !FileKinds.IsModel(file.Kind))
     {
         return Results.NotFound();
+    }
+
+    if (!Session.CanDownload(context))
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
     }
 
     context.Response.Headers.CacheControl = "no-store";
@@ -294,6 +305,12 @@ app.MapGet("/zip/{**path}", async (string? path, HttpContext context, LibraryQue
         return;
     }
 
+    if (!Session.CanDownload(context))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+
     var name = FolderZip.ArchiveName(folder);
     context.Response.ContentType = "application/zip";
     context.Response.Headers.ContentDisposition = new Microsoft.Net.Http.Headers.ContentDispositionHeaderValue("attachment")
@@ -316,7 +333,8 @@ app.MapGet("/zip/{**path}", async (string? path, HttpContext context, LibraryQue
 });
 
 // Only files the index knows about can be downloaded, so ignored files and anything outside the library stay out.
-app.MapGet("/download/{**path}", (string? path, LibraryQueries queries, LibraryPaths paths) =>
+// Browse-only accounts get images only: they're shown on folder pages and as their own file page.
+app.MapGet("/download/{**path}", (string? path, HttpContext context, LibraryQueries queries, LibraryPaths paths) =>
 {
     if (!LibraryPaths.TryNormalize(path, out var relative) ||
         queries.FindFile(relative) is not { } file ||
@@ -324,6 +342,11 @@ app.MapGet("/download/{**path}", (string? path, LibraryQueries queries, LibraryP
         !File.Exists(fullPath))
     {
         return Results.NotFound();
+    }
+
+    if (file.Kind != FileKinds.Image && !Session.CanDownload(context))
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
     }
 
     return Results.File(fullPath, FileKinds.ContentType(file.Name), file.Name, enableRangeProcessing: true);

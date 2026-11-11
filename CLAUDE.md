@@ -32,6 +32,10 @@ settings change, update both (and re-run the screenshot script when the UI chang
   `.env.example` documents every setting. Keep the three in step with README.md's configuration table.
 - **Accounts live in the app** (first-run setup, Users page for admins), not in env vars.
   Multi-user with an admin flag; optional forced password change for new/reset accounts (default on).
+- **Browse-only accounts** (`can_download = 0`, set by admins on the Users page): `Session.CanDownload` (home network
+  or admin always true) gates `/download` (images excepted: folder and image pages show them), `/zip`,
+  `/slicer-link` and `/mesh` with a 403, and the views hide the buttons, the 3D toggle and Account → This computer.
+  The 3D viewer is off for them on purpose: its mesh is a printable copy.
 - **Home network needs no login**; anything through the reverse proxy always does. No public share links yet.
 - **Open in Bambu Studio**: macOS `bambustudioopen://<encoded url>`, Windows/Linux `bambustudio://open?file=<encoded url>`
   (from Bambu Studio's `GUI_App.cpp`). Bambu only trusts MakerWorld and asks once ("not from a trusted site") — answer
@@ -106,7 +110,7 @@ in the repo — tests build synthetic 3MF/STL in code.
 - `cache/<key>/` — extracted previews, renders, viewer meshes (`mesh_*.bin.gz`). Key = hash(path, size, mtime,
   indexer version), so URLs are immutable; orphaned folders are removed after each complete scan.
 - `users.db` — accounts and favourites. **Never dropped**: `UserStore.Migrate` runs numbered steps in place
-  (v1 users, v2 must_change_password, v3 favourites). Add new steps at the end; back up before deploying a new step.
+  (v1 users, v2 must_change_password, v3 favourites, v4 can_download). Add new steps at the end; back up before deploying a new step.
 - `keys/` — data-protection keys (cookies, antiforgery, slicer links).
 
 ## Auth model (security-sensitive — keep these rules)

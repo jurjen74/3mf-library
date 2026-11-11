@@ -22,8 +22,11 @@ follows.
   never counts as home network, whatever it claims.
 - **First account:** only while there are no accounts, never through a proxy, and either from the home network or
   with the one-time setup code from the container log.
-- Passwords are stored as salted hashes (ASP.NET Core Identity's hasher). Admin rights are checked in the database on
-  every request, so taking them away works immediately.
+- Passwords are stored as salted hashes (ASP.NET Core Identity's hasher). Admin rights and browse-only are checked in
+  the database on every request, so a change works immediately.
+- **Browse-only accounts** get no file downloads, folder ZIPs, slicer links or 3D meshes from the server (images
+  in the library excepted, since folder pages show them). A slicer link handed out before the change stays valid for
+  its 15 minutes.
 - Changing or resetting a password ends that account's other sessions.
 - Logins, setup and password changes are rate-limited: 8 attempts per 5 minutes per address (logins) or per account
   (password changes).

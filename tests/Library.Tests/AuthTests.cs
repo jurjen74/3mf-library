@@ -387,6 +387,40 @@ public sealed partial class AuthTests : IDisposable
     }
 
     [Fact]
+    public async Task An_admin_can_make_an_account_browse_only_and_back()
+    {
+        var (admin, users) = Site();
+        await LogIn(admin, "jurjen", Password);
+
+        await UsersAction(admin, "Add", [new("userName", "viewer"), new("password", "viewer password 1"), new("repeatPassword", "viewer password 1"), new("browseOnly", "true")]);
+        var viewer = users.List().Single(u => u.UserName == "viewer");
+        var listed = await (await Send(admin, "/users", Outside)).Content.ReadAsStringAsync();
+        var allowed = await UsersAction(admin, "Downloads", [new("id", viewer.Id.ToString()), new("allow", "true")]);
+        var canAfter = users.List().Single(u => u.UserName == "viewer").CanDownload;
+        await UsersAction(admin, "Downloads", [new("id", viewer.Id.ToString()), new("allow", "false")]);
+
+        Assert.False(viewer.CanDownload);
+        Assert.Contains(">browse only</span>", listed);
+        Assert.Contains("viewer can download again", allowed);
+        Assert.True(canAfter);
+        Assert.False(users.Verify("viewer", "viewer password 1")!.CanDownload);
+        Assert.True(users.Verify("jurjen", Password)!.CanDownload);
+    }
+
+    [Fact]
+    public void Admins_can_always_download()
+    {
+        var users = new UserStore(new LibraryOptions { LibraryPath = _root, DataPath = _root });
+        users.Migrate();
+        var admin = users.CreateFirstAdmin("jurjen", Password)!;
+
+        users.SetCanDownload(admin.Id, false);
+
+        Assert.True(users.FindById(admin.Id)!.CanDownload);
+        Assert.False(users.List().Single().CanDownload);  // stored, so it applies if admin rights go
+    }
+
+    [Fact]
     public async Task Resetting_or_deleting_a_user_ends_their_sessions()
     {
         var (admin, users) = Site();
@@ -533,6 +567,7 @@ public sealed partial class AuthTests : IDisposable
         Assert.NotNull(user);
         Assert.True(user.IsAdmin);
         Assert.False(user.MustChangePassword);
+        Assert.True(user.CanDownload);
     }
 
     [Fact]

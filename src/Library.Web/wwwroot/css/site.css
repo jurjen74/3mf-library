@@ -375,6 +375,8 @@ section + section { margin-top: 2rem; }
   background: var(--accent-soft);
 }
 .download:hover { text-decoration: none; filter: brightness(0.97); }
+/* A browse-only account sees the size without a link. */
+.file-size { font-size: 0.8rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; padding: 0.25rem 0; }
 
 /* Other files */
 .file-list {

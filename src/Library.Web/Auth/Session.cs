@@ -50,6 +50,13 @@ public static class Session
     public static AppUser? CurrentUser(HttpContext context) => context.Items[UserKey] as AppUser;
 
     /// <summary>
+    /// Whether this visitor may take files away: downloads, folder ZIPs, slicer links and the 3D viewer's meshes.
+    /// The home network and admins always can; a browse-only account can't. Read from the database per request.
+    /// </summary>
+    public static bool CanDownload(HttpContext context) =>
+        TrustedNetwork.IsHomeNetworkUser(context.User) || CurrentUser(context) is { CanDownload: true };
+
+    /// <summary>
     /// Middleware: someone with a starting or reset password is sent to the Account page until they've chosen their
     /// own. Pages, previews, downloads and meshes all wait.
     /// </summary>

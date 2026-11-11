@@ -36,6 +36,10 @@
                         {
                             <span class="pill pill--muted">you</span>
                         }
+                        @if (!account.CanDownload && !account.IsAdmin)
+                        {
+                            <span class="pill pill--muted" title="Can browse and see previews, but not download, open in a slicer or use the 3D view">browse only</span>
+                        }
                         @if (account.MustChangePassword)
                         {
                             <span class="pill pill--warn" title="Logged in with a password set by an admin; must choose their own">must change password</span>
@@ -75,6 +79,15 @@
                                 <input type="hidden" name="admin" value="@(account.IsAdmin ? "false" : "true")">
                                 <button type="submit" class="button small">@(account.IsAdmin ? "Remove admin" : "Make admin")</button>
                             </form>
+                            @if (!account.IsAdmin)
+                            {
+                                <form method="post" asp-page-handler="Downloads">
+                                    <input type="hidden" name="id" value="@account.Id">
+                                    <input type="hidden" name="allow" value="@(account.CanDownload ? "false" : "true")">
+                                    <button type="submit" class="button small"
+                                            title="@(account.CanDownload ? "Only browsing: no downloads, slicer links or 3D view" : "Allow downloads, slicer links and the 3D view again")">@(account.CanDownload ? "Browse only" : "Allow downloads")</button>
+                                </form>
+                            }
                             <form method="post" asp-page-handler="Delete" data-confirm="Delete @account.UserName? They can no longer log in.">
                                 <input type="hidden" name="id" value="@account.Id">
                                 <button type="submit" class="button small danger">Delete</button>
@@ -113,6 +126,10 @@
                 <label class="remember">
                     <input type="checkbox" name="isAdmin" value="true" checked="@Model.NewUser.IsAdmin">
                     <span>Admin (can manage users)</span>
+                </label>
+                <label class="remember">
+                    <input type="checkbox" name="browseOnly" value="true" checked="@Model.NewUser.BrowseOnly">
+                    <span>Browse only (no downloads, slicer links or 3D view; ignored for admins)</span>
                 </label>
                 <button type="submit" class="button primary">Add user</button>
             </form>
