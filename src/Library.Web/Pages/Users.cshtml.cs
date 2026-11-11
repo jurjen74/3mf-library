@@ -119,7 +119,7 @@ public sealed class UsersModel(UserStore users, ILogger<UsersModel> log) : PageM
         return Done(admin ? $"{name} is now an admin." : $"{name} is no longer an admin.");
     }
 
-    /// <summary>Browse only (no downloads, ZIPs, slicer links or 3D viewer) or back to normal; applies at once.</summary>
+    /// <summary>Browse only (no downloads, ZIPs or slicer links) or back to normal; applies at once.</summary>
     public IActionResult OnPostDownloads(long id, bool allow)
     {
         if (Load() is { } denied)
@@ -134,7 +134,7 @@ public sealed class UsersModel(UserStore users, ILogger<UsersModel> log) : PageM
         }
 
         log.LogInformation("'{Admin}' {Change} downloads for '{UserName}'", Me!.UserName, allow ? "allowed" : "stopped", name);
-        return Done(allow ? $"{name} can download again." : $"{name} can now only browse: no downloads, slicer links or 3D view.");
+        return Done(allow ? $"{name} can download again." : $"{name} can now only browse: no downloads or slicer links.");
     }
 
     public IActionResult OnPostDelete(long id)

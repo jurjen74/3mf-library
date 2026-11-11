@@ -38,7 +38,7 @@
                         }
                         @if (!account.CanDownload && !account.IsAdmin)
                         {
-                            <span class="pill pill--muted" title="Can browse and see previews, but not download, open in a slicer or use the 3D view">browse only</span>
+                            <span class="pill pill--muted" title="Can browse, see previews and use the 3D view, but not download or open in a slicer">browse only</span>
                         }
                         @if (account.MustChangePassword)
                         {
@@ -85,7 +85,7 @@
                                     <input type="hidden" name="id" value="@account.Id">
                                     <input type="hidden" name="allow" value="@(account.CanDownload ? "false" : "true")">
                                     <button type="submit" class="button small"
-                                            title="@(account.CanDownload ? "Only browsing: no downloads, slicer links or 3D view" : "Allow downloads, slicer links and the 3D view again")">@(account.CanDownload ? "Browse only" : "Allow downloads")</button>
+                                            title="@(account.CanDownload ? "Only browsing: no downloads or slicer links" : "Allow downloads and slicer links again")">@(account.CanDownload ? "Browse only" : "Allow downloads")</button>
                                 </form>
                             }
                             <form method="post" asp-page-handler="Delete" data-confirm="Delete @account.UserName? They can no longer log in.">
@@ -129,7 +129,7 @@
                 </label>
                 <label class="remember">
                     <input type="checkbox" name="browseOnly" value="true" checked="@Model.NewUser.BrowseOnly">
-                    <span>Browse only (no downloads, slicer links or 3D view; ignored for admins)</span>
+                    <span>Browse only (no downloads or slicer links; ignored for admins)</span>
                 </label>
                 <button type="submit" class="button primary">Add user</button>
             </form>

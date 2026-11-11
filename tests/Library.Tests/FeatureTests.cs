@@ -123,7 +123,7 @@ public sealed partial class FeatureTests : IDisposable
         var filePage = await Page(viewer, "/file/Lamp.3mf");
         var folderPage = await Page(viewer, "/browse/Kits/Robot");
         var accountPage = await Page(viewer, "/account");
-        string[] refused = ["/download/Lamp.3mf", "/download/Kits/Robot/readme.txt", "/zip/Kits/Robot", "/slicer-link/Lamp.3mf", mesh];
+        string[] refused = ["/download/Lamp.3mf", "/download/Kits/Robot/readme.txt", "/zip/Kits/Robot", "/slicer-link/Lamp.3mf"];
         var statuses = new List<HttpStatusCode>();
         foreach (var url in refused)
         {
@@ -132,7 +132,7 @@ public sealed partial class FeatureTests : IDisposable
 
         Assert.StartsWith("/mesh/", mesh);
         Assert.Contains("/img/", filePage);
-        Assert.DoesNotContain("data-mesh=\"/mesh", filePage);   // Razor keeps empty data- attributes
+        Assert.Contains($"data-mesh=\"{mesh}\"", filePage);    // the 3D view stays
         Assert.DoesNotContain("slicer-button", filePage);
         Assert.DoesNotContain("/download/", filePage);
         Assert.Contains("readme.txt", folderPage);
@@ -141,11 +141,11 @@ public sealed partial class FeatureTests : IDisposable
         Assert.DoesNotContain("this-computer", accountPage);
         Assert.All(statuses, status => Assert.Equal(HttpStatusCode.Forbidden, status));
         Assert.Equal(HttpStatusCode.OK, (await Send(viewer, "/download/Gallery/print.png", Outside)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Send(viewer, mesh, Outside)).StatusCode);
 
         // Allowed again: applies from the next request, without logging in again.
         users.SetCanDownload(viewerId, true);
         Assert.Equal(HttpStatusCode.OK, (await Send(viewer, "/download/Lamp.3mf", Outside)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await Send(viewer, mesh, Outside)).StatusCode);
         Assert.Contains("/zip/Kits/Robot", await Page(viewer, "/browse/Kits/Robot"));
     }
 

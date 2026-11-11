@@ -24,8 +24,9 @@ follows.
   with the one-time setup code from the container log.
 - Passwords are stored as salted hashes (ASP.NET Core Identity's hasher). Admin rights and browse-only are checked in
   the database on every request, so a change works immediately.
-- **Browse-only accounts** get no file downloads, folder ZIPs, slicer links or 3D meshes from the server (images
-  in the library excepted, since folder pages show them). A slicer link handed out before the change stays valid for
+- **Browse-only accounts** get no file downloads, folder ZIPs or slicer links from the server (images in the
+  library excepted, since folder pages show them). They do get the 3D viewer, which loads a simplified version of
+  the model made for the browser, not the file itself. A slicer link handed out before the change stays valid for
   its 15 minutes.
 - Changing or resetting a password ends that account's other sessions.
 - Logins, setup and password changes are rate-limited: 8 attempts per 5 minutes per address (logins) or per account

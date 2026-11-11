@@ -13,7 +13,7 @@
     var colours = file.ColourList;
     var favourite = Favourites.ForRequest(HttpContext).Contains(file.Path);
     var canDownload = Session.CanDownload(HttpContext);
-    string? MeshUrl(PlateRow? plate) => file.CacheKey is null || !FileKinds.IsModel(file.Kind) || !canDownload
+    string? MeshUrl(PlateRow? plate) => file.CacheKey is null || !FileKinds.IsModel(file.Kind)
         ? null
         : plate is not null ? $"/mesh/{file.CacheKey}/plate_{plate.Idx}.bin" : $"/mesh/{file.CacheKey}/model.bin";
     var stageMesh = MeshUrl(selected);

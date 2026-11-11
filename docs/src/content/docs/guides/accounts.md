@@ -27,13 +27,12 @@ The last admin can't be removed or deleted, so there's always someone who can ma
 
 ## Browse-only accounts
 
-A browse-only account sees the whole library: folders, previews, photos, descriptions, print details, search, Recent
-and its own favourites. It can't take files away:
+A browse-only account sees the whole library: folders, previews, photos, the 3D view, descriptions, print details,
+search, Recent and its own favourites. It can't take files away:
 
 - no **Download** buttons, no **Download folder** ZIP, and no download links for other files (images in a folder
   are still shown);
-- no **Open in** button for the slicer;
-- no **3D** view, since the 3D model the viewer loads is a copy of the model that could be printed.
+- no **Open in** button for the slicer.
 
 The site refuses these downloads itself too, so a copied link doesn't work for a browse-only account either. The
 change applies at once, without logging in again. A browse-only account shows a **browse only** label on the Users

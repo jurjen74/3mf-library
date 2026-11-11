@@ -33,9 +33,9 @@ settings change, update both (and re-run the screenshot script when the UI chang
 - **Accounts live in the app** (first-run setup, Users page for admins), not in env vars.
   Multi-user with an admin flag; optional forced password change for new/reset accounts (default on).
 - **Browse-only accounts** (`can_download = 0`, set by admins on the Users page): `Session.CanDownload` (home network
-  or admin always true) gates `/download` (images excepted: folder and image pages show them), `/zip`,
-  `/slicer-link` and `/mesh` with a 403, and the views hide the buttons, the 3D toggle and Account → This computer.
-  The 3D viewer is off for them on purpose: its mesh is a printable copy.
+  or admin always true) gates `/download` (images excepted: folder and image pages show them), `/zip`
+  and `/slicer-link` with a 403, and the views hide the buttons and Account → This computer. The 3D viewer
+  (`/mesh`) stays: the owner wants browse-only people to see models in 3D.
 - **Home network needs no login**; anything through the reverse proxy always does. No public share links yet.
 - **Open in Bambu Studio**: macOS `bambustudioopen://<encoded url>`, Windows/Linux `bambustudio://open?file=<encoded url>`
   (from Bambu Studio's `GUI_App.cpp`). Bambu only trusts MakerWorld and asks once ("not from a trusted site") — answer

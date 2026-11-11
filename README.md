@@ -63,8 +63,8 @@ The site asks you to create the first account, which becomes the admin:
   ```
 
 Admins add other people under **Users** (optionally asking them to choose their own password at the first login),
-reset passwords, grant admin rights and make accounts **browse only** (they see everything but can't download,
-open files in a slicer or use the 3D view). Everyone changes their own password under their name in the top bar.
+reset passwords, grant admin rights and make accounts **browse only** (they see everything, the 3D view
+included, but can't download or open files in a slicer). Everyone changes their own password under their name in the top bar.
 
 ## Library on a NAS (NFS)
 

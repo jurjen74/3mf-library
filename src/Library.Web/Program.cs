@@ -242,12 +242,6 @@ app.MapGet("/mesh/{key}/{name}.bin", async (string key, string name, MeshService
         return Results.NotFound();
     }
 
-    // The viewer's mesh is a printable copy of the model, so browse-only accounts don't get it.
-    if (!Session.CanDownload(context))
-    {
-        return Results.StatusCode(StatusCodes.Status403Forbidden);
-    }
-
     var result = await meshes.GetAsync(key, name, cancellationToken);
     if (result.Error is not null)
     {

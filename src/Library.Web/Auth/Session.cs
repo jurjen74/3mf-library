@@ -50,7 +50,7 @@ public static class Session
     public static AppUser? CurrentUser(HttpContext context) => context.Items[UserKey] as AppUser;
 
     /// <summary>
-    /// Whether this visitor may take files away: downloads, folder ZIPs, slicer links and the 3D viewer's meshes.
+    /// Whether this visitor may take files away: downloads, folder ZIPs and slicer links (the 3D viewer is fine).
     /// The home network and admins always can; a browse-only account can't. Read from the database per request.
     /// </summary>
     public static bool CanDownload(HttpContext context) =>

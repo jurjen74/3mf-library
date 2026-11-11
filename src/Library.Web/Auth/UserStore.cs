@@ -46,8 +46,8 @@ public sealed class AppUser
     public bool IsAdmin => Admin != 0;
 
     /// <summary>
-    /// False for a browse-only account: it sees everything but can't download files or folders, open them in a
-    /// slicer or load the 3D viewer. Admins can always download, whatever this says.
+    /// False for a browse-only account: it sees everything, the 3D viewer included, but can't download files or
+    /// folders or open them in a slicer. Admins can always download, whatever this says.
     /// </summary>
     public bool CanDownload => Download != 0 || IsAdmin;
 
